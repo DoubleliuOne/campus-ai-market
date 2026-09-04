@@ -18,6 +18,7 @@ import com.campusmarket.vo.ItemVO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -27,24 +28,31 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
 public class ItemService {
 
+    private static final String HOT_ITEMS_KEY = "cache:item:hot";
+    private static final long HOT_ITEMS_TTL_SECONDS = 300L;
+
     private final ItemMapper itemMapper;
     private final CategoryMapper categoryMapper;
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate redisTemplate;
 
     public ItemService(ItemMapper itemMapper,
                        CategoryMapper categoryMapper,
                        UserMapper userMapper,
-                       ObjectMapper objectMapper) {
+                       ObjectMapper objectMapper,
+                       StringRedisTemplate redisTemplate) {
         this.itemMapper = itemMapper;
         this.categoryMapper = categoryMapper;
         this.userMapper = userMapper;
         this.objectMapper = objectMapper;
+        this.redisTemplate = redisTemplate;
     }
 
     public Long publish(CreateItemRequest request, LoginUser loginUser) {
@@ -55,6 +63,7 @@ public class ItemService {
         item.setStatus("ON_SALE");
 
         itemMapper.insert(item);
+        evictHotCache();
         return item.getId();
     }
 
@@ -67,6 +76,7 @@ public class ItemService {
         applyItemContent(item, request.getTitle(), request.getDescription(), request.getPrice(),
                 request.getCategoryId(), request.getImages());
         itemMapper.updateById(item);
+        evictHotCache();
     }
 
     public void takeOffShelf(Long id, LoginUser loginUser) {
@@ -80,6 +90,44 @@ public class ItemService {
 
         item.setStatus("OFF_SHELF");
         itemMapper.updateById(item);
+        evictHotCache();
+    }
+
+    public List<ItemVO> getHotItems() {
+        try {
+            String cached = redisTemplate.opsForValue().get(HOT_ITEMS_KEY);
+            if (StringUtils.hasText(cached)) {
+                return objectMapper.readValue(cached, new TypeReference<List<ItemVO>>() {
+                });
+            }
+        } catch (RuntimeException | JsonProcessingException ignored) {
+            // Redis unavailable or cache data invalid: fall through to MySQL.
+        }
+
+        List<Item> items = itemMapper.selectList(Wrappers.<Item>lambdaQuery()
+                .eq(Item::getStatus, "ON_SALE")
+                .orderByDesc(Item::getCreateTime)
+                .last("LIMIT 10"));
+        List<ItemVO> itemVos = toItemVOs(items);
+
+        try {
+            redisTemplate.opsForValue().set(HOT_ITEMS_KEY,
+                    objectMapper.writeValueAsString(itemVos),
+                    HOT_ITEMS_TTL_SECONDS,
+                    TimeUnit.SECONDS);
+        } catch (RuntimeException | JsonProcessingException ignored) {
+            // Cache write failure should not break the business request.
+        }
+
+        return itemVos;
+    }
+
+    public void evictHotCache() {
+        try {
+            redisTemplate.delete(HOT_ITEMS_KEY);
+        } catch (RuntimeException ignored) {
+            // Redis unavailable: cache will expire by TTL.
+        }
     }
 
     private Item getOwnedItem(Long id, LoginUser loginUser) {

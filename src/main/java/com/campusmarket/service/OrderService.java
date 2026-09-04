@@ -35,15 +35,18 @@ public class OrderService {
     private final ItemMapper itemMapper;
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
+    private final ItemService itemService;
 
     public OrderService(OrderMapper orderMapper,
                         ItemMapper itemMapper,
                         UserMapper userMapper,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        ItemService itemService) {
         this.orderMapper = orderMapper;
         this.itemMapper = itemMapper;
         this.userMapper = userMapper;
         this.objectMapper = objectMapper;
+        this.itemService = itemService;
     }
 
     @Transactional
@@ -76,6 +79,7 @@ public class OrderService {
         order.setPrice(item.getPrice());
         order.setStatus("CREATED");
         orderMapper.insert(order);
+        itemService.evictHotCache();
 
         return order.getId();
     }
@@ -113,6 +117,7 @@ public class OrderService {
                     .eq(Item::getId, order.getItemId())
                     .eq(Item::getStatus, "SOLD")
                     .set(Item::getStatus, "ON_SALE"));
+            itemService.evictHotCache();
             return;
         }
 

@@ -17,11 +17,16 @@ public class UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final TokenBlacklistService tokenBlacklistService;
 
-    public UserService(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtUtil jwtUtil) {
+    public UserService(UserMapper userMapper,
+                       PasswordEncoder passwordEncoder,
+                       JwtUtil jwtUtil,
+                       TokenBlacklistService tokenBlacklistService) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     public Long register(RegisterRequest request) {
@@ -66,6 +71,13 @@ public class UserService {
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername());
         return new LoginResponse(token, user.getId(), user.getUsername());
+    }
+
+    public void logout(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            throw new BusinessException("缺少token");
+        }
+        tokenBlacklistService.blacklist(authorizationHeader.substring(7));
     }
 
     private String trimToNull(String value) {

@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/items")
@@ -52,6 +53,11 @@ public class ItemController {
                                                 @RequestParam(defaultValue = "1") long page,
                                                 @RequestParam(defaultValue = "10") long size) {
         return ApiResponse.ok(itemService.search(keyword, categoryId, minPrice, maxPrice, page, size));
+    }
+
+    @GetMapping("/hot")
+    public ApiResponse<List<ItemVO>> hot() {
+        return ApiResponse.ok(itemService.getHotItems());
     }
 
     @GetMapping("/{id}")

@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -36,5 +37,11 @@ public class AuthController {
     @GetMapping("/me")
     public ApiResponse<LoginUser> me(@AuthenticationPrincipal LoginUser loginUser) {
         return ApiResponse.ok(loginUser);
+    }
+
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@RequestHeader("Authorization") String authorizationHeader) {
+        userService.logout(authorizationHeader);
+        return ApiResponse.<Void>ok(null);
     }
 }

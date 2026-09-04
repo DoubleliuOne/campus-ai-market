@@ -38,4 +38,10 @@ public class JwtUtil {
         String username = decodedJwt.getClaim("username").asString();
         return new LoginUser(userId, username);
     }
+
+    public long getRemainingSeconds(String token) {
+        DecodedJWT decodedJwt = JWT.require(algorithm).build().verify(token);
+        long remainingMillis = decodedJwt.getExpiresAt().getTime() - System.currentTimeMillis();
+        return Math.max(0, remainingMillis / 1000);
+    }
 }
