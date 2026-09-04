@@ -36,6 +36,14 @@ public class ItemController {
         return ApiResponse.ok(itemService.publish(request, loginUser));
     }
 
+    @GetMapping("/mine")
+    public ApiResponse<PageResult<ItemVO>> mine(@AuthenticationPrincipal LoginUser loginUser,
+                                                @RequestParam(required = false) String status,
+                                                @RequestParam(defaultValue = "1") long page,
+                                                @RequestParam(defaultValue = "10") long size) {
+        return ApiResponse.ok(itemService.myItems(loginUser, status, page, size));
+    }
+
     @GetMapping
     public ApiResponse<PageResult<ItemVO>> list(@RequestParam(required = false) String keyword,
                                                 @RequestParam(required = false) Long categoryId,

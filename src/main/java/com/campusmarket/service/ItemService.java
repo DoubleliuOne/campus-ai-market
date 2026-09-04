@@ -152,6 +152,27 @@ public class ItemService {
         return new PageResult<>(toItemVOs(records), itemPage.getTotal(), itemPage.getCurrent(), itemPage.getSize());
     }
 
+    public PageResult<ItemVO> myItems(LoginUser loginUser,
+                                      String status,
+                                      long page,
+                                      long size) {
+        if (page < 1 || size < 1 || size > 100) {
+            throw new BusinessException("分页参数不正确");
+        }
+
+        LambdaQueryWrapper<Item> queryWrapper = Wrappers.lambdaQuery();
+        queryWrapper
+                .eq(Item::getSellerId, loginUser.id())
+                .eq(StringUtils.hasText(status), Item::getStatus, status)
+                .orderByDesc(Item::getCreateTime);
+
+        Page<Item> itemPage = itemMapper.selectPage(new Page<>(page, size), queryWrapper);
+        return new PageResult<>(toItemVOs(itemPage.getRecords()),
+                itemPage.getTotal(),
+                itemPage.getCurrent(),
+                itemPage.getSize());
+    }
+
     public ItemVO getDetail(Long id) {
         Item item = itemMapper.selectById(id);
         if (item == null || !"ON_SALE".equals(item.getStatus())) {
