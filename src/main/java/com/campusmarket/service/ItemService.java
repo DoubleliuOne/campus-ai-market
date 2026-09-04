@@ -149,31 +149,7 @@ public class ItemService {
 
         Page<Item> itemPage = itemMapper.selectPage(new Page<>(page, size), queryWrapper);
         List<Item> records = itemPage.getRecords();
-
-        Map<Long, String> usernameMap = Collections.emptyMap();
-        Map<Long, String> categoryNameMap = Collections.emptyMap();
-
-        if (!records.isEmpty()) {
-            List<Long> sellerIds = records.stream().map(Item::getSellerId).distinct().collect(Collectors.toList());
-            List<Long> categoryIds = records.stream().map(Item::getCategoryId).distinct().collect(Collectors.toList());
-
-            usernameMap = userMapper.selectList(
-                            Wrappers.<User>lambdaQuery().in(User::getId, sellerIds))
-                    .stream()
-                    .collect(Collectors.toMap(User::getId, User::getUsername, (left, right) -> left));
-
-            categoryNameMap = categoryMapper.selectList(
-                            Wrappers.<Category>lambdaQuery().in(Category::getId, categoryIds))
-                    .stream()
-                    .collect(Collectors.toMap(Category::getId, Category::getName, (left, right) -> left));
-        }
-
-        List<ItemVO> itemVos = new ArrayList<>();
-        for (Item item : records) {
-            itemVos.add(toItemVO(item, usernameMap, categoryNameMap));
-        }
-
-        return new PageResult<>(itemVos, itemPage.getTotal(), itemPage.getCurrent(), itemPage.getSize());
+        return new PageResult<>(toItemVOs(records), itemPage.getTotal(), itemPage.getCurrent(), itemPage.getSize());
     }
 
     public ItemVO getDetail(Long id) {
@@ -195,6 +171,31 @@ public class ItemService {
         }
 
         return toItemVO(item, usernameMap, categoryNameMap);
+    }
+
+    public List<ItemVO> toItemVOs(List<Item> items) {
+        if (items == null || items.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Long> sellerIds = items.stream().map(Item::getSellerId).distinct().collect(Collectors.toList());
+        List<Long> categoryIds = items.stream().map(Item::getCategoryId).distinct().collect(Collectors.toList());
+
+        Map<Long, String> usernameMap = userMapper.selectList(
+                        Wrappers.<User>lambdaQuery().in(User::getId, sellerIds))
+                .stream()
+                .collect(Collectors.toMap(User::getId, User::getUsername, (left, right) -> left));
+
+        Map<Long, String> categoryNameMap = categoryMapper.selectList(
+                        Wrappers.<Category>lambdaQuery().in(Category::getId, categoryIds))
+                .stream()
+                .collect(Collectors.toMap(Category::getId, Category::getName, (left, right) -> left));
+
+        List<ItemVO> itemVos = new ArrayList<>();
+        for (Item item : items) {
+            itemVos.add(toItemVO(item, usernameMap, categoryNameMap));
+        }
+        return itemVos;
     }
 
     private ItemVO toItemVO(Item item,
