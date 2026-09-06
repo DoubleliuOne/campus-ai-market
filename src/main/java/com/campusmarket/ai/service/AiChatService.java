@@ -23,6 +23,7 @@ public class AiChatService {
                         + "如果用户需要查询商品，你必须调用searchItems工具获取真实结果，不能自己编造商品、价格和库存。"
                         + "如果用户想看某个具体商品的详情，你必须调用getItemDetail工具。"
                         + "如果用户查询自己的订单，你必须调用getMyOrders工具，用户身份由系统提供，不能要求用户提供userId。"
+                        + "如果用户让你推荐或帮他挑选商品，你必须调用recommendItems工具，不能根据你自己的知识凭空推荐商品。"
                         + "调用工具后，根据返回的JSON商品列表用中文向用户介绍。")
                 .defaultTools(itemTools, orderTools)
                 .build();

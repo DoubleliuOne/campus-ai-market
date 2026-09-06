@@ -64,4 +64,14 @@ public class ItemTools {
             return "商品详情序列化失败";
         }
     }
+
+    @Tool(name = "recommendItems",
+            description = "根据用户想要的商品类型和预算推荐在售商品。会真实搜索平台商品，结果交给AI分析推荐")
+    public String recommendItems(
+            @ToolParam(required = false, description = "用户想要的商品类型，例如机械键盘、安卓手机、教材") String keyword,
+            @ToolParam(required = false, description = "商品分类id") Long categoryId,
+            @ToolParam(required = false, description = "用户能接受的最高价格") Double maxPrice,
+            @ToolParam(required = false, description = "其他推荐说明") String note) {
+        return searchItems(keyword, categoryId, null, maxPrice, 1, 10);
+    }
 }
