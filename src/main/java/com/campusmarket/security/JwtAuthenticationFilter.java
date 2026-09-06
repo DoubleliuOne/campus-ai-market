@@ -32,19 +32,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
 
         if (header != null && header.startsWith("Bearer ")) {
+            String token = header.substring(7);
+            boolean blacklisted = false;
             try {
-                String token = header.substring(7);
-                if (!tokenBlacklistService.isBlacklisted(token)) {
+                blacklisted = tokenBlacklistService.isBlacklisted(token);
+            } catch (RuntimeException ex) {
+                // Redis unavailable: fall back to JWT signature verification only.
+            }
+
+            if (blacklisted) {
+                SecurityContextHolder.clearContext();
+            } else {
+                try {
                     LoginUser loginUser = jwtUtil.parseToken(token);
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(loginUser, null, Collections.emptyList());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
-                } else {
+                } catch (RuntimeException ex) {
                     SecurityContextHolder.clearContext();
                 }
-            } catch (RuntimeException ex) {
-                SecurityContextHolder.clearContext();
             }
         }
 

@@ -50,4 +50,18 @@ public class ItemTools {
             return "查询结果序列化失败";
         }
     }
+
+    @Tool(name = "getItemDetail",
+            description = "按商品id查询当前正在出售的商品详情")
+    public String getItemDetail(
+            @ToolParam(required = true, description = "商品id") Long itemId) {
+        try {
+            ItemVO detail = itemService.getDetail(itemId);
+            return objectMapper.writeValueAsString(detail);
+        } catch (BusinessException ex) {
+            return "查询失败：" + ex.getMessage();
+        } catch (JsonProcessingException ex) {
+            return "商品详情序列化失败";
+        }
+    }
 }
