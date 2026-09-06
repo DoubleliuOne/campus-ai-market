@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS campusai_market
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
@@ -17,6 +19,11 @@ CREATE TABLE IF NOT EXISTS `user` (
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COMMENT = 'platform users';
+
+-- Demo accounts used by local development and Docker deployment
+INSERT IGNORE INTO `user` (username, password_hash, campus)
+VALUES ('bob', '$2a$10$7YCxPkmt80zKWVrxhmaDB.9zK6W21B85rhap6MXZokolbrhAV0AqS', '测试大学'),
+       ('buyer1', '$2a$10$I7EFUJdjeooToU1nqNX1MO9GpCuAdr3TkQvky3MTu0qU/FO5e2ymK', '测试大学');
 
 -- Category table: item classification
 CREATE TABLE IF NOT EXISTS category (

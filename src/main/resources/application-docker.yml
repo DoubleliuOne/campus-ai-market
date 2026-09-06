@@ -25,9 +25,9 @@ spring:
         cache:
           enabled: true
         onnx:
-          model-uri: https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx
+          model-uri: ${EMBEDDING_MODEL_URI:https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx}
         tokenizer:
-          uri: https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json
+          uri: ${EMBEDDING_TOKENIZER_URI:https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json}
 
 jwt:
   secret: ${JWT_SECRET:docker-dev-secret-change-me-at-least-32-chars}

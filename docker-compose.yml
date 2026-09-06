@@ -45,7 +45,11 @@ services:
       REDIS_HOST: redis
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET:-campusai-docker-dev-secret-change-me-in-production}
+      EMBEDDING_MODEL_URI: ${EMBEDDING_MODEL_URI:-https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx}
+      EMBEDDING_TOKENIZER_URI: ${EMBEDDING_TOKENIZER_URI:-https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json}
       TZ: Asia/Shanghai
+    volumes:
+      - ./.model-cache:/models:ro
     depends_on:
       mysql:
         condition: service_healthy

@@ -26,6 +26,8 @@ CampusAI Market 是一个面向校园二手交易场景的 Java 后端 + Spring 
 - Redis：Docker 容器，名称为 `campusai-redis`，端口 6379，镜像 `redis:7`。启动命令：
   `docker start campusai-redis`
 - Docker Desktop 需要先运行；若 Redis 未启动，代码已做降级处理，但 JWT 黑名单不可用。
+- Docker Compose 完整栈使用独立 MySQL/Redis 容器与 `campusai-market_mysql_data` 卷，和本机 MySQL80、`campusai-redis` 互不共享数据。
+- 本机 Embedding 模型缓存目录 `.model-cache/`（Git 忽略）可被 Compose 只读挂载到容器 `/models`，避免运行时下载失败。
 
 ## 3. 关键技术版本
 
@@ -207,6 +209,14 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
   - `GET /api/favorites/check/{itemId}`：登录用户查询是否已收藏某商品。
 - 页面已通过桌面与移动视口检查；商品搜索、登录、收藏切换、AI 真实问答均在前端页面验证通过。
 
+### 5.8 Docker Compose（Phase 12 完整栈已启动验证）
+
+- 四服务：MySQL 8.0、Redis 7、Backend、Frontend，`docker compose up -d` 可一键启动。
+- MySQL 通过 `sql/init.sql` 自动初始化建表、默认分类与演示账号 `bob`、`buyer1`；脚本开头已加 `SET NAMES utf8mb4`，中文初始化无乱码。
+- Embedding 模型默认使用 hf-mirror URL；本机通过 `.env` 中 `EMBEDDING_MODEL_URI` / `EMBEDDING_TOKENIZER_URI` 指向 `.model-cache` 本地文件，避免容器下载空文件。
+- 前端 `http://localhost:8081/`，后端 API `http://localhost:8080/`，Nginx 已反代 `/api`。
+- 已新增根目录 `README.md` 记录运行方式、端口、环境变量与模型说明。
+
 ## 6. 数据库
 
 建表脚本：`sql/init.sql`
@@ -286,7 +296,7 @@ styles/   全局 CSS 变量与通用样式
 
 ## 8. 已提交 Git 历史
 
-当前 `main` 分支最新提交：`0c2cb13 docs: add project context`
+当前 `main` 分支最新提交：`6bbc90b feat: add Docker Compose deployment for Phase 12`
 
 提交顺序：
 
@@ -304,9 +314,11 @@ da1f759 feat: add getMyOrders tool with user context
 b77e95e feat: optimize agent with item context and honest answers
 493865c feat: add RAG trading rule knowledge base
 0c2cb13 docs: add project context
+5043010 feat: add Vue 3 frontend and category/favorite APIs
+6bbc90b feat: add Docker Compose deployment for Phase 12
 ```
 
-`CONTEXT.md` 已随 `0c2cb13` 提交过一次；本轮若继续修改本文档，需要后续提交携带。
+截至当前文档，Phase 12 收尾修复（README、init.sql、Compose 模型配置、忽略规则等）仍未提交；提交时不要把 `application.yml`、`.env`、`.model-cache/` 带入。
 
 ## 9. 已验证成功的内容
 
@@ -330,6 +342,8 @@ b77e95e feat: optimize agent with item context and honest answers
 - 多个功能改动后均通过 Maven `compile`（退出码 0）
 - Vue 前端开发服务器、登录、首页真实商品、收藏切换、页面导航均通过浏览器验证
 - AI 助手返回内容可正确渲染 Markdown，不再显示 `**`、`##` 等原文标记
+- Phase 12：`docker compose up -d` 完整栈启动成功，MySQL/Redis Healthy，后端 `Started`，前端 8081 返回页面。
+- Phase 12：分类接口返回正确中文；`bob/123456` 登录返回 token；`/api/items/hot` 与分页搜索接口均返回 200。
 
 ## 10. 当前已知问题与注意点
 
@@ -348,15 +362,16 @@ b77e95e feat: optimize agent with item context and honest answers
 13. 前端暂没有图片上传接口，发布商品只能填图片 URL；如需真实文件上传需要后端加存储/静态资源能力。
 14. AI 助手对话只保存在当前前端页面内存，刷新后即清空；服务端 conversation/message 持久化仍未做。
 15. 前端生产构建有单 chunk 超过 500KB 的提示，属于体积优化项，可放到 Phase 13 做路由懒加载与手动分包。
-16. Vite 代理只服务于本地开发；Phase 12 的 Docker/Nginx 部署需要配置 `/api` 反代或改为同源静态托管。
+16. Docker/Nginx 已配置 `/api` 反代；Vite 代理只服务于本地开发。
+17. Compose MySQL 由 `sql/init.sql` 初始化，本机 MySQL80 里的数据不会自动进入 Compose；若 Docker 内 hf-mirror 下载 Embedding 模型为空文件，使用 `.model-cache` 本地挂载。
 
 ## 11. 下一步计划
 
 按原项目阶段：
 
 - Phase 11：Vue 3 + Element Plus 前端主体已完成；可选补充：真实图片上传、编辑商品页体验优化、商品详情对已售/下架商品的卖家视图
-- Phase 12：Docker Compose（MySQL、Redis、Backend、Frontend）
-- Phase 13：项目优化与文档（参数校验、Swagger/OpenAPI、日志、README、ER 图、架构图、GitHub 仓库）
+- Phase 12：Docker Compose（MySQL、Redis、Backend、Frontend）完整栈已启动验证
+- Phase 13：项目优化与文档（参数校验、统一异常、日志切面、Swagger/OpenAPI、README 扩展、ER 图、架构图、GitHub 仓库）
 
 后续可选增强：
 

@@ -5,6 +5,7 @@ frontend
 dist
 node_modules
 src/main/resources/application.yml
+.model-cache
 CONTEXT.md
 .env
 .env.*
