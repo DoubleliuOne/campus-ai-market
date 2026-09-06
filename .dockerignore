@@ -1,0 +1,12 @@
+.git
+.idea
+target
+frontend
+dist
+node_modules
+src/main/resources/application.yml
+CONTEXT.md
+.env
+.env.*
+docker-compose.yml
+*.log
