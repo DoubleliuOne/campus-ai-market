@@ -1,5 +1,6 @@
 package com.campusmarket.ai.service;
 
+import com.campusmarket.ai.rag.KnowledgeBaseService;
 import com.campusmarket.ai.tool.ItemTools;
 import com.campusmarket.ai.tool.OrderTools;
 import com.campusmarket.exception.BusinessException;
@@ -20,14 +21,17 @@ public class AiChatService {
     private final ChatClient chatClient;
     private final ItemService itemService;
     private final ObjectMapper objectMapper;
+    private final KnowledgeBaseService knowledgeBaseService;
 
     public AiChatService(ChatClient.Builder chatClientBuilder,
                          ItemTools itemTools,
                          OrderTools orderTools,
                          ItemService itemService,
-                         ObjectMapper objectMapper) {
+                         ObjectMapper objectMapper,
+                         KnowledgeBaseService knowledgeBaseService) {
         this.itemService = itemService;
         this.objectMapper = objectMapper;
+        this.knowledgeBaseService = knowledgeBaseService;
         this.chatClient = chatClientBuilder
                 .defaultSystem("你是校园二手交易助手。"
                         + "如果用户需要查询商品，你必须调用searchItems工具获取真实结果，不能自己编造商品、价格和库存。"
@@ -35,6 +39,7 @@ public class AiChatService {
                         + "如果用户查询自己的订单，你必须调用getMyOrders工具，用户身份由系统提供，不能要求用户提供userId。"
                         + "如果用户让你推荐或帮他挑选商品，你必须调用recommendItems工具，不能根据你自己的知识凭空推荐商品。"
                         + "如果商品信息中缺少用户需要的参数，你必须明确说明没有该参数，不能自己编造配置、成色或使用情况。"
+                        + "涉及平台禁售、发布、交易、退款规则的问题，必须依据用户消息中检索到的平台规则内容回答，不能编造平台规则。"
                         + "没有搜索到商品时，要诚实告知用户没有找到，并建议放宽条件，不能假装有结果。"
                         + "调用工具后，根据返回的JSON数据用中文向用户介绍。")
                 .defaultTools(itemTools, orderTools)
@@ -59,16 +64,29 @@ public class AiChatService {
     }
 
     private String buildItemContext(String message, Long itemId) {
+        StringBuilder userContent = new StringBuilder();
+
+        String rules = knowledgeBaseService.retrieveRules(message);
+        if (rules != null) {
+            userContent.append("以下是检索到的平台规则知识：\n")
+                    .append(rules)
+                    .append("\n\n");
+        }
+
         if (itemId == null) {
-            return message;
+            return userContent.length() == 0 ? message : userContent.append(message).toString();
         }
 
         ItemVO item = itemService.getDetail(itemId);
         try {
             String itemJson = objectMapper.writeValueAsString(item);
-            return "用户当前正在查看的真实商品信息：\n" + itemJson + "\n\n用户问题：" + message;
+            userContent.append("用户当前正在查看的真实商品信息：\n")
+                    .append(itemJson)
+                    .append("\n\n");
         } catch (JsonProcessingException ex) {
             throw new BusinessException("商品上下文生成失败");
         }
+
+        return userContent.append(message).toString();
     }
 }
