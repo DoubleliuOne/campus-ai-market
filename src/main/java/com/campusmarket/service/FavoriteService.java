@@ -57,6 +57,17 @@ public class FavoriteService {
         favoriteMapper.insert(favorite);
     }
 
+    public boolean isFavorite(Long itemId, LoginUser loginUser) {
+        if (itemId == null) {
+            return false;
+        }
+        Long count = favoriteMapper.selectCount(
+                Wrappers.<Favorite>lambdaQuery()
+                        .eq(Favorite::getUserId, loginUser.id())
+                        .eq(Favorite::getItemId, itemId));
+        return count != null && count > 0;
+    }
+
     public void remove(Long itemId, LoginUser loginUser) {
         if (itemId == null) {
             throw new BusinessException("商品id不能为空");

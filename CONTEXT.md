@@ -194,6 +194,19 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
   - `SimpleVectorStore` 内存向量库
   - 命中规则关键词时用 `similaritySearch` 取 Top 3 注入上下文
 
+### 5.7 Vue 3 前端（Phase 11 主体已完成，尚未提交）
+
+- 目录：`frontend/`，Vue 3 + Vite 6 + Vue Router + Element Plus + Axios + lucide 图标。
+- 本地开发：`npm install` 后 `npm run dev`，默认 `http://127.0.0.1:5173/`，Vite 把 `/api` 代理到 `http://localhost:8080`。
+- 页面：登录/注册、首页商品市场、商品详情、发布/编辑商品、我的商品、我的收藏、我的订单、AI 助手、404。
+- 会话：JWT 存 `localStorage`，Axios 请求自动带 `Authorization`，401 自动清会话并回登录页。
+- 商品图片后端只保存 URL；前端支持最多 5 个图片 URL 输入与预览，加载失败时按分类显示占位图。
+- AI 助手回答使用 `marked + DOMPurify` 做安全 Markdown 渲染；带 `itemId` 时每轮请求都会携带当前商品上下文。
+- 为 Phase 11 新增的两个后端契约：
+  - `GET /api/categories`：公开分类列表，供搜索筛选和发布页使用。
+  - `GET /api/favorites/check/{itemId}`：登录用户查询是否已收藏某商品。
+- 页面已通过桌面与移动视口检查；商品搜索、登录、收藏切换、AI 真实问答均在前端页面验证通过。
+
 ## 6. 数据库
 
 建表脚本：`sql/init.sql`
@@ -258,9 +271,22 @@ vo/
 
 Controller 不写业务；Service 负责业务；Mapper 使用 MyBatis-Plus `BaseMapper`；统一返回 `ApiResponse`；业务错误由 `GlobalExceptionHandler` 转成 `code=400`。
 
+前端 `frontend/src/` 也按功能分层：
+
+```text
+api/      Axios 实例与后端接口封装
+router/   路由与登录守卫
+stores/   登录会话状态
+layouts/  顶部导航与整体布局
+components/ 商品卡片、图片占位、状态标签、空状态
+views/    各页面视图
+utils/    金额与时间格式化
+styles/   全局 CSS 变量与通用样式
+```
+
 ## 8. 已提交 Git 历史
 
-当前 `main` 分支最新提交：`493865c feat: add RAG trading rule knowledge base`
+当前 `main` 分支最新提交：`0c2cb13 docs: add project context`
 
 提交顺序：
 
@@ -277,9 +303,10 @@ da1f759 feat: add getMyOrders tool with user context
 385f140 feat: add recommendItems tool and complete Tool Calling phase
 b77e95e feat: optimize agent with item context and honest answers
 493865c feat: add RAG trading rule knowledge base
+0c2cb13 docs: add project context
 ```
 
-本文档本身尚未提交。
+`CONTEXT.md` 已随 `0c2cb13` 提交过一次；本轮若继续修改本文档，需要后续提交携带。
 
 ## 9. 已验证成功的内容
 
@@ -301,6 +328,8 @@ b77e95e feat: optimize agent with item context and honest answers
 - Phase 9：带 `itemId` 的商品问答不编造缺失参数；搜索不到显卡时 AI 诚实告知无结果
 - Phase 10 RAG：能正确回答“不能发布什么”“退款规则”“交易注意事项”
 - 多个功能改动后均通过 Maven `compile`（退出码 0）
+- Vue 前端开发服务器、登录、首页真实商品、收藏切换、页面导航均通过浏览器验证
+- AI 助手返回内容可正确渲染 Markdown，不再显示 `**`、`##` 等原文标记
 
 ## 10. 当前已知问题与注意点
 
@@ -316,12 +345,16 @@ b77e95e feat: optimize agent with item context and honest answers
 10. Windows PowerShell 5.1 用字符串发送中文 JSON 会乱码；测试时先把 JSON 转成 UTF-8 字节再作为 `-Body`。PowerShell 控制台显示乱码不代表 API 返回乱码，可用 `curl` 或由后端日志确认。
 11. 项目目录名包含空格；后续 Docker Compose、shell 脚本要全程加引号。
 12. 当前没有参数校验 starter、没有 Swagger/OpenAPI、没有统一 JSON 解析错误处理、没有日志切面；这些属于后续优化阶段。
+13. 前端暂没有图片上传接口，发布商品只能填图片 URL；如需真实文件上传需要后端加存储/静态资源能力。
+14. AI 助手对话只保存在当前前端页面内存，刷新后即清空；服务端 conversation/message 持久化仍未做。
+15. 前端生产构建有单 chunk 超过 500KB 的提示，属于体积优化项，可放到 Phase 13 做路由懒加载与手动分包。
+16. Vite 代理只服务于本地开发；Phase 12 的 Docker/Nginx 部署需要配置 `/api` 反代或改为同源静态托管。
 
 ## 11. 下一步计划
 
 按原项目阶段：
 
-- Phase 11：Vue 3 + Element Plus 前端（登录、注册、首页、商品列表、商品详情、发布商品、我的商品、我的收藏、我的订单、AI 助手页面）
+- Phase 11：Vue 3 + Element Plus 前端主体已完成；可选补充：真实图片上传、编辑商品页体验优化、商品详情对已售/下架商品的卖家视图
 - Phase 12：Docker Compose（MySQL、Redis、Backend、Frontend）
 - Phase 13：项目优化与文档（参数校验、Swagger/OpenAPI、日志、README、ER 图、架构图、GitHub 仓库）
 

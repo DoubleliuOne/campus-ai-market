@@ -33,6 +33,12 @@ public class FavoriteController {
         return ApiResponse.<Void>ok(null);
     }
 
+    @GetMapping("/check/{itemId}")
+    public ApiResponse<Boolean> check(@PathVariable Long itemId,
+                                      @AuthenticationPrincipal LoginUser loginUser) {
+        return ApiResponse.ok(favoriteService.isFavorite(itemId, loginUser));
+    }
+
     @DeleteMapping("/{itemId}")
     public ApiResponse<Void> remove(@PathVariable Long itemId,
                                     @AuthenticationPrincipal LoginUser loginUser) {
