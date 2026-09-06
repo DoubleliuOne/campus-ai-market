@@ -24,6 +24,7 @@ public class AgentController {
     @PostMapping("/chat")
     public ApiResponse<AgentChatResponse> chat(@RequestBody AgentChatRequest request,
                                                @AuthenticationPrincipal LoginUser loginUser) {
-        return ApiResponse.ok(new AgentChatResponse(aiChatService.chat(request.getMessage(), loginUser)));
+        return ApiResponse.ok(new AgentChatResponse(
+                aiChatService.chat(request.getMessage(), loginUser, request.getItemId())));
     }
 }
