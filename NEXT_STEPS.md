@@ -2,7 +2,7 @@
 
 > 新 Codex 会话请先阅读本文件与 `CONTEXT.md`，再开始修改。
 > 创建时间：2026-09-06
-> 最后更新：2026-09-06（Phase 12 完整栈已验证）
+> 最后更新：2026-09-11（Phase 12 已提交，Phase 13 待开始）
 
 ## 1. 项目一句话现状
 
@@ -56,8 +56,8 @@ CampusAI Market 是一个面向校园二手交易与 Java 后端面试展示的�
 ## 4. Git 状态
 
 - 分支：`main`
-- 最新提交：`6bbc90b feat: add Docker Compose deployment for Phase 12`
-- 工作区：Phase 12 收尾修复尚未提交（`README.md`、`sql/init.sql`、`application-docker.yml`、`docker-compose.yml`、忽略规则与文档更新）。
+- 最新提交：`ddca895 feat: finish Phase 12 Docker stack validation`
+- 工作区：干净，可以开始 Phase 13。
 - 无 Git 远程仓库，尚未 push 到 GitHub。
 - 敏感文件应继续忽略：
   - `src/main/resources/application.yml`
@@ -79,13 +79,46 @@ CampusAI Market 是一个面向校园二手交易与 Java 后端面试展示的�
 
 ### 5.2 Phase 13：后端健壮性与工程优化
 
-- 引入 `spring-boot-starter-validation`，为 DTO 增加 `@NotBlank`、`@Size`、`@DecimalMin` 等参数校验。
-- 补充参数校验异常与 JSON 解析异常的统一处理。
-- 增加日志切面，记录 Controller/Service 调用、耗时、异常。
-- 接入 Swagger/OpenAPI，形成接口文档。
-- 编写项目 README。
-- 绘制 ER 图与系统架构图。
-- 创建 GitHub 仓库并推送全部历史。
+建议按下面顺序执行，每完成一项都运行对应验证后再继续：
+
+1. 参数校验
+   - 在 `pom.xml` 引入 `spring-boot-starter-validation`。
+   - 检查 `src/main/java/com/campusmarket/dto/` 下全部请求 DTO。
+   - 为注册、登录、商品发布/修改、订单创建、状态修改等补充 `@NotBlank`、`@Size`、`@NotNull`、`@DecimalMin`、`@Positive` 等约束。
+   - Controller 参数增加 `@Valid`。
+2. 统一异常处理
+   - 在 `GlobalExceptionHandler` 增加 `MethodArgumentNotValidException`、`ConstraintViolationException`、`HttpMessageNotReadableException` 的统一返回。
+   - 返回结构继续使用 `ApiResponse`，不要把异常栈暴露给客户端。
+   - 至少验证：空用户名、短密码、负价格、非法 JSON 都返回明确中文错误。
+3. 日志切面
+   - 新建 `aspect` 包，增加 Controller/Service 调用日志。
+   - 记录请求方法、类名/方法名、参数摘要、耗时、成功/异常；不要记录密码、JWT、API Key。
+   - 保持日志简洁，避免循环或把大对象完整打印。
+4. Swagger/OpenAPI
+   - 引入 SpringDoc OpenAPI 依赖。
+   - 配置 JWT Bearer 认证入口。
+   - 为 Controller 与主要 DTO/VO 补充必要注解，保证 `/swagger-ui/index.html` 可用。
+5. README 扩展
+   - 补充项目背景、功能清单、技术栈、系统架构、数据库表说明、接口概览、演示账号、Docker 与本地运行方式。
+   - 结合已有的 `README.md` 增量完善，不重复写临时命令。
+6. ER 图与系统架构图
+   - 放在 `docs/` 下，使用 Mermaid 或 PNG/SVG。
+   - ER 图覆盖 `user`、`category`、`item`、`favorite`、`orders`。
+   - 架构图覆盖 Vue/Nginx、Spring Boot、MySQL、Redis、DeepSeek、本地 Embedding/RAG。
+   - README 中链接对应图片。
+7. GitHub
+   - 确认敏感文件仍被忽略后，创建远程仓库。
+   - 配置 `origin`，推送 `main` 全部历史。
+   - 推送后核对远程页面和 README 渲染。
+
+Phase 13 验收标准：
+
+- `mvn compile` 和必要测试通过。
+- 非法参数返回统一、可读的 `code=400` 错误。
+- 日志能显示关键调用和耗时，且不含密钥/密码。
+- Swagger 页面可打开、接口定义完整、可携带 JWT 调接口。
+- README 与新会话可独立完成本地运行和 Docker 部署。
+- Git 工作区干净，远程仓库可访问。
 
 ### 5.3 前端收尾项（可选）
 
@@ -138,7 +171,7 @@ npm run dev
 - Compose 的 MySQL 数据来自 `sql/init.sql`，本机 MySQL80 里的测试数据不会自动带入；删除 Compose 卷前请确认不需要其中数据。
 - `application.yml` 含真实密钥，任何提交前都要确认被 `.dockerignore` / `.gitignore` 排除。
 - 目录名含空格，所有 PowerShell、Maven、Git、Docker 路径都要加引号。
-- 当前没有 `README.md`、Swagger、参数校验 starter、日志切面。
+- `README.md` 已存在；当前仍没有 Swagger、参数校验 starter、统一异常补充和日志切面。
 - AI 对话目前是前端内存会话，服务端无历史持久化。
 - 商品图片没有文件上传能力，只有 URL 输入。
 
@@ -147,10 +180,11 @@ npm run dev
 ```text
 请先阅读项目根目录 D:\CampusAI Market\NEXT_STEPS.md 与 CONTEXT.md，
 先不要修改代码，用中文说明你对当前项目状态和剩余工作的理解。
-然后按 NEXT_STEPS.md 从下一个未完成阶段开始执行，每完成一个阶段更新文档。
+当前最新提交是 ddca895，Phase 12 已完成，请从 Phase 13（后端健壮性与工程优化）开始执行。
+按 NEXT_STEPS.md 的顺序实现参数校验、统一异常、日志切面、Swagger、README、ER/架构图和 GitHub 推送，每完成一个阶段更新文档。
 项目目录含空格，命令中请始终使用引号。
 ```
 
 ## 9. 建议下一步
 
-Phase 12 完整栈已启动验证。下一步进入 Phase 13：参数校验、统一异常/日志、Swagger、README 扩展、ER/架构图，最后创建 GitHub 仓库并推送。
+Phase 12 已提交且工作区干净。下一步直接进入 Phase 13：参数校验、统一异常/日志、Swagger、README 扩展、ER/架构图，最后创建 GitHub 仓库并推送。

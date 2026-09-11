@@ -1,7 +1,7 @@
 # CampusAI Market 项目上下文
 
 > 本文档用于让下一个 Codex 会话在只读取本项目文件时快速恢复上下文。
-> 最后更新：2026-09-06
+> 最后更新：2026-09-11
 
 ## 1. 项目一句话定位
 
@@ -196,7 +196,7 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
   - `SimpleVectorStore` 内存向量库
   - 命中规则关键词时用 `similaritySearch` 取 Top 3 注入上下文
 
-### 5.7 Vue 3 前端（Phase 11 主体已完成，尚未提交）
+### 5.7 Vue 3 前端（Phase 11 已完成并提交）
 
 - 目录：`frontend/`，Vue 3 + Vite 6 + Vue Router + Element Plus + Axios + lucide 图标。
 - 本地开发：`npm install` 后 `npm run dev`，默认 `http://127.0.0.1:5173/`，Vite 把 `/api` 代理到 `http://localhost:8080`。
@@ -296,7 +296,7 @@ styles/   全局 CSS 变量与通用样式
 
 ## 8. 已提交 Git 历史
 
-当前 `main` 分支最新提交：`6bbc90b feat: add Docker Compose deployment for Phase 12`
+当前 `main` 分支最新提交：`ddca895 feat: finish Phase 12 Docker stack validation`
 
 提交顺序：
 
@@ -316,9 +316,10 @@ b77e95e feat: optimize agent with item context and honest answers
 0c2cb13 docs: add project context
 5043010 feat: add Vue 3 frontend and category/favorite APIs
 6bbc90b feat: add Docker Compose deployment for Phase 12
+ddca895 feat: finish Phase 12 Docker stack validation
 ```
 
-截至当前文档，Phase 12 收尾修复（README、init.sql、Compose 模型配置、忽略规则等）仍未提交；提交时不要把 `application.yml`、`.env`、`.model-cache/` 带入。
+截至当前文档，工作区干净，Phase 12 已经提交完成；Phase 13 尚未开始。后续提交仍不要把 `application.yml`、`.env`、`.model-cache/` 带入。
 
 ## 9. 已验证成功的内容
 
