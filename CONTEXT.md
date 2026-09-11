@@ -217,6 +217,14 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
 - 前端 `http://localhost:8081/`，后端 API `http://localhost:8080/`，Nginx 已反代 `/api`。
 - 已新增根目录 `README.md` 记录运行方式、端口、环境变量与模型说明。
 
+### 5.9 后端工程化（Phase 13 本地实现并验证）
+
+- 参数校验：`spring-boot-starter-validation` 已接入，DTO、路径 ID、分页和筛选参数均有约束。
+- 统一异常：`GlobalExceptionHandler` 覆盖请求体校验、方法参数校验、JSON 解析、参数类型、缺失参数、访问拒绝和未知异常。
+- 日志切面：`aspect/CallLoggingAspect.java` 记录 Controller/Service 的类名、方法名、参数摘要、耗时和异常，不记录密码、JWT、API Key 或消息正文。
+- Swagger/OpenAPI：SpringDoc 2.8.9 已接入，Swagger UI 为 `/swagger-ui/index.html`，OpenAPI JSON 为 `/v3/api-docs`，支持 Bearer JWT。
+- 文档：README 已扩展，新增 `docs/er-diagram.md` 与 `docs/architecture.md`。
+
 ## 6. 数据库
 
 建表脚本：`sql/init.sql`
@@ -255,9 +263,12 @@ ai/
 common/
   ApiResponse.java
   PageResult.java
+aspect/
+  CallLoggingAspect.java
 config/
   AppConfig.java
   MybatisPlusConfig.java
+  OpenApiConfig.java
 controller/
   AgentController.java
   AuthController.java
@@ -279,7 +290,7 @@ service/
 vo/
 ```
 
-Controller 不写业务；Service 负责业务；Mapper 使用 MyBatis-Plus `BaseMapper`；统一返回 `ApiResponse`；业务错误由 `GlobalExceptionHandler` 转成 `code=400`。
+Controller 不写业务；Service 负责业务；Mapper 使用 MyBatis-Plus `BaseMapper`；统一返回 `ApiResponse`；业务和校验错误由 `GlobalExceptionHandler` 转成 `code=400`；调用日志由 `CallLoggingAspect` 统一处理。
 
 前端 `frontend/src/` 也按功能分层：
 
@@ -296,7 +307,7 @@ styles/   全局 CSS 变量与通用样式
 
 ## 8. 已提交 Git 历史
 
-当前 `main` 分支最新提交：`ddca895 feat: finish Phase 12 Docker stack validation`
+当前 `main` 分支最新已提交基线：`ddca895 feat: finish Phase 12 Docker stack validation`
 
 提交顺序：
 
@@ -319,7 +330,7 @@ b77e95e feat: optimize agent with item context and honest answers
 ddca895 feat: finish Phase 12 Docker stack validation
 ```
 
-截至当前文档，工作区干净，Phase 12 已经提交完成；Phase 13 尚未开始。后续提交仍不要把 `application.yml`、`.env`、`.model-cache/` 带入。
+截至当前文档，Phase 13 代码和文档已实现并验证，准备提交本地 Git；没有创建或推送 GitHub 远程仓库。后续提交仍不要把 `application.yml`、`.env`、`.model-cache/` 带入。
 
 ## 9. 已验证成功的内容
 
@@ -345,6 +356,11 @@ ddca895 feat: finish Phase 12 Docker stack validation
 - AI 助手返回内容可正确渲染 Markdown，不再显示 `**`、`##` 等原文标记
 - Phase 12：`docker compose up -d` 完整栈启动成功，MySQL/Redis Healthy，后端 `Started`，前端 8081 返回页面。
 - Phase 12：分类接口返回正确中文；`bob/123456` 登录返回 token；`/api/items/hot` 与分页搜索接口均返回 200。
+- Phase 13：`mvn clean test` 通过，共 5 个测试。
+- Phase 13：`GlobalExceptionHandlerWebTest` 4 个 MockMvc 用例通过，覆盖空用户名、短密码、负价格和非法 JSON。
+- Phase 13：真实启动后 Swagger UI 返回 200，OpenAPI 3.1 文档包含 16 个路径和 `bearerAuth` scheme。
+- Phase 13：真实 HTTP 请求的空用户名、短密码、负价格、非法 JSON 均返回统一 `code=400` 中文错误。
+- Phase 13：日志实测显示 `LoginRequest` 类型和 JWT 长度，不包含密码或 token 原文。
 
 ## 10. 当前已知问题与注意点
 
@@ -359,7 +375,7 @@ ddca895 feat: finish Phase 12 Docker stack validation
 9. Spring AI 的 OpenAI 兼容 base-url 必须是 `https://api.deepseek.com`，不能写成 `/v1`，否则 DeepSeek 返回 404。
 10. Windows PowerShell 5.1 用字符串发送中文 JSON 会乱码；测试时先把 JSON 转成 UTF-8 字节再作为 `-Body`。PowerShell 控制台显示乱码不代表 API 返回乱码，可用 `curl` 或由后端日志确认。
 11. 项目目录名包含空格；后续 Docker Compose、shell 脚本要全程加引号。
-12. 当前没有参数校验 starter、没有 Swagger/OpenAPI、没有统一 JSON 解析错误处理、没有日志切面；这些属于后续优化阶段。
+12. 参数校验、统一异常、Swagger/OpenAPI 和日志切面已在 Phase 13 完成；GitHub 远程仓库与 push 按用户要求暂缓。
 13. 前端暂没有图片上传接口，发布商品只能填图片 URL；如需真实文件上传需要后端加存储/静态资源能力。
 14. AI 助手对话只保存在当前前端页面内存，刷新后即清空；服务端 conversation/message 持久化仍未做。
 15. 前端生产构建有单 chunk 超过 500KB 的提示，属于体积优化项，可放到 Phase 13 做路由懒加载与手动分包。
@@ -372,7 +388,7 @@ ddca895 feat: finish Phase 12 Docker stack validation
 
 - Phase 11：Vue 3 + Element Plus 前端主体已完成；可选补充：真实图片上传、编辑商品页体验优化、商品详情对已售/下架商品的卖家视图
 - Phase 12：Docker Compose（MySQL、Redis、Backend、Frontend）完整栈已启动验证
-- Phase 13：项目优化与文档（参数校验、统一异常、日志切面、Swagger/OpenAPI、README 扩展、ER 图、架构图、GitHub 仓库）
+- Phase 13：参数校验、统一异常、日志切面、Swagger/OpenAPI、README、ER 图和架构图已完成并验证；GitHub 远程仓库仍待用户确认后创建
 
 后续可选增强：
 

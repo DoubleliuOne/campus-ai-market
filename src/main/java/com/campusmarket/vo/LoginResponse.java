@@ -1,9 +1,17 @@
 package com.campusmarket.vo;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "登录响应")
 public class LoginResponse {
 
+    @Schema(description = "JWT")
     private String token;
+
+    @Schema(description = "用户id", example = "1")
     private Long userId;
+
+    @Schema(description = "用户名", example = "bob")
     private String username;
 
     public LoginResponse() {

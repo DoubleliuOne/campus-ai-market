@@ -1,12 +1,22 @@
 package com.campusmarket.common;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.util.List;
 
+@Schema(description = "分页结果")
 public class PageResult<T> {
 
+    @Schema(description = "当前页数据")
     private List<T> records;
+
+    @Schema(description = "总记录数", example = "25")
     private long total;
+
+    @Schema(description = "当前页码", example = "1")
     private long page;
+
+    @Schema(description = "每页数量", example = "10")
     private long size;
 
     public PageResult() {

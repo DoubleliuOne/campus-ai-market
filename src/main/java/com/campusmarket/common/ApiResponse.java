@@ -1,9 +1,17 @@
 package com.campusmarket.common;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "统一接口响应")
 public class ApiResponse<T> {
 
+    @Schema(description = "业务状态码", example = "200")
     private int code;
+
+    @Schema(description = "提示信息", example = "success")
     private String message;
+
+    @Schema(description = "响应数据")
     private T data;
 
     public ApiResponse() {
