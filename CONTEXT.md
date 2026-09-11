@@ -307,7 +307,7 @@ styles/   全局 CSS 变量与通用样式
 
 ## 8. 已提交 Git 历史
 
-当前 `main` 分支最新已提交基线：`ddca895 feat: finish Phase 12 Docker stack validation`
+Phase 13 实现提交：`401f09f feat: complete Phase 13 engineering hardening`
 
 提交顺序：
 
@@ -328,9 +328,10 @@ b77e95e feat: optimize agent with item context and honest answers
 5043010 feat: add Vue 3 frontend and category/favorite APIs
 6bbc90b feat: add Docker Compose deployment for Phase 12
 ddca895 feat: finish Phase 12 Docker stack validation
+401f09f feat: complete Phase 13 engineering hardening
 ```
 
-截至当前文档，Phase 13 代码和文档已实现并验证，准备提交本地 Git；没有创建或推送 GitHub 远程仓库。后续提交仍不要把 `application.yml`、`.env`、`.model-cache/` 带入。
+截至当前文档，Phase 13 代码和文档已实现、验证并提交到本地 Git；没有创建或推送 GitHub 远程仓库。后续提交仍不要把 `application.yml`、`.env`、`.model-cache/` 带入。
 
 ## 9. 已验证成功的内容
 

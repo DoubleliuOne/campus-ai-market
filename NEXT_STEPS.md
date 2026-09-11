@@ -68,8 +68,8 @@ CampusAI Market 是一个面向校园二手交易与 Java 后端面试展示的�
 ## 4. Git 状态
 
 - 分支：`main`
-- 最新提交：`ddca895 feat: finish Phase 12 Docker stack validation`
-- 工作区：Phase 13 实现已完成，准备提交本地 Git；不会自动创建或推送 GitHub 远程仓库。
+- Phase 13 实现提交：`401f09f feat: complete Phase 13 engineering hardening`
+- 工作区：Phase 13 已完成本地提交；不会自动创建或推送 GitHub 远程仓库。
 - 无 Git 远程仓库，尚未 push 到 GitHub。
 - 敏感文件应继续忽略：
   - `src/main/resources/application.yml`
@@ -194,8 +194,8 @@ npm run dev
 ```text
 请先阅读项目根目录 D:\CampusAI Market\NEXT_STEPS.md 与 CONTEXT.md，
 先不要修改代码，用中文说明你对当前项目状态和剩余工作的理解。
-当前最新提交是 ddca895，Phase 12 已完成，请从 Phase 13（后端健壮性与工程优化）开始执行。
-按 NEXT_STEPS.md 的顺序实现参数校验、统一异常、日志切面、Swagger、README、ER/架构图和 GitHub 推送，每完成一个阶段更新文档。
+当前最新提交以 `git log -1` 为准，Phase 13 本地实现与验证已完成。
+除 GitHub 远程创建与推送外，参数校验、统一异常、日志切面、Swagger、README、ER/架构图均已完成。
 项目目录含空格，命令中请始终使用引号。
 ```
 
