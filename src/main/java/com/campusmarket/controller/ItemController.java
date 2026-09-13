@@ -23,6 +23,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -87,6 +88,10 @@ public class ItemController {
             @Parameter(description = "最高价格")
             @RequestParam(required = false)
             @DecimalMin(value = "0", message = "最高价格不能小于0") BigDecimal maxPrice,
+            @Parameter(description = "排序：latest、priceAsc、priceDesc")
+            @RequestParam(defaultValue = "latest")
+            @Pattern(regexp = "latest|priceAsc|priceDesc",
+                    message = "排序方式只能是latest、priceAsc或priceDesc") String sort,
             @Parameter(description = "页码，从1开始")
             @RequestParam(defaultValue = "1")
             @Min(value = 1, message = "页码不能小于1") long page,
@@ -94,7 +99,8 @@ public class ItemController {
             @RequestParam(defaultValue = "10")
             @Min(value = 1, message = "每页数量不能小于1")
             @Max(value = 100, message = "每页数量不能超过100") long size) {
-        return ApiResponse.ok(itemService.search(keyword, categoryId, minPrice, maxPrice, page, size));
+        return ApiResponse.ok(itemService.search(
+                keyword, categoryId, minPrice, maxPrice, sort, page, size));
     }
 
     @GetMapping("/hot")
@@ -108,6 +114,15 @@ public class ItemController {
     public ApiResponse<ItemVO> detail(
             @PathVariable @Positive(message = "商品id必须为正数") Long id) {
         return ApiResponse.ok(itemService.getDetail(id));
+    }
+
+    @GetMapping("/{id}/manage")
+    @Operation(summary = "查询自己发布的商品详情", description = "卖家可查看在售、已售出和已下架商品")
+    @SecurityRequirement(name = "bearerAuth")
+    public ApiResponse<ItemVO> managedDetail(
+            @PathVariable @Positive(message = "商品id必须为正数") Long id,
+            @AuthenticationPrincipal LoginUser loginUser) {
+        return ApiResponse.ok(itemService.getOwnedDetail(id, loginUser));
     }
 
     @PutMapping("/{id}")
@@ -127,6 +142,16 @@ public class ItemController {
             @PathVariable @Positive(message = "商品id必须为正数") Long id,
             @AuthenticationPrincipal LoginUser loginUser) {
         itemService.takeOffShelf(id, loginUser);
+        return ApiResponse.<Void>ok(null);
+    }
+
+    @PatchMapping("/{id}/relist")
+    @Operation(summary = "重新上架商品", description = "仅允许卖家将 OFF_SHELF 商品恢复为 ON_SALE")
+    @SecurityRequirement(name = "bearerAuth")
+    public ApiResponse<Void> relist(
+            @PathVariable @Positive(message = "商品id必须为正数") Long id,
+            @AuthenticationPrincipal LoginUser loginUser) {
+        itemService.relist(id, loginUser);
         return ApiResponse.<Void>ok(null);
     }
 }

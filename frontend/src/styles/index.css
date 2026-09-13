@@ -1,12 +1,24 @@
 :root {
   --campus-green: #147a5c;
   --campus-green-dark: #0d5e47;
+  --campus-green-soft: #e8f4ef;
+  --campus-blue: #256e8f;
+  --campus-blue-soft: #eaf3f8;
   --campus-orange: #dc7a35;
+  --campus-orange-soft: #fff1e7;
   --campus-ink: #1f2623;
   --campus-text: #4d5a54;
+  --campus-text-soft: #75817c;
   --campus-line: #e2e7e3;
-  --campus-bg: #f6f7f5;
+  --campus-line-strong: #cfd8d3;
+  --campus-bg: #f4f6f5;
   --campus-surface: #ffffff;
+  --campus-surface-muted: #f8faf9;
+  --campus-shadow-sm: 0 2px 8px rgba(24, 50, 40, 0.05);
+  --campus-shadow-md: 0 12px 32px rgba(24, 50, 40, 0.08);
+  --campus-radius-sm: 6px;
+  --campus-radius-md: 8px;
+  --campus-page-width: 1220px;
   --el-color-primary: #147a5c;
   --el-color-primary-light-3: #54a68d;
   --el-color-primary-light-5: #83bfae;
@@ -18,6 +30,8 @@
   --el-color-warning: #dc7a35;
   --el-border-radius-base: 6px;
   --el-border-radius-small: 4px;
+  --el-border-color: #dfe5e1;
+  --el-fill-color-light: #f5f7f6;
   font-family:
     Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
     Arial, sans-serif;
@@ -38,6 +52,7 @@ body {
   color: var(--campus-ink);
   background: var(--campus-bg);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
@@ -53,7 +68,7 @@ textarea {
 
 .page-shell {
   width: 100%;
-  max-width: 1180px;
+  max-width: var(--campus-page-width);
   margin: 0 auto;
   padding: 24px 20px 56px;
 }
@@ -69,6 +84,7 @@ textarea {
   margin: 6px 0 0;
   color: var(--campus-text);
   font-size: 14px;
+  line-height: 1.6;
 }
 
 .page-head {
@@ -82,8 +98,51 @@ textarea {
 .toolbar {
   background: var(--campus-surface);
   border: 1px solid var(--campus-line);
-  border-radius: 8px;
+  border-radius: var(--campus-radius-md);
   padding: 14px;
+  box-shadow: var(--campus-shadow-sm);
+}
+
+.surface-card {
+  background: var(--campus-surface);
+  border: 1px solid var(--campus-line);
+  border-radius: var(--campus-radius-md);
+  box-shadow: var(--campus-shadow-sm);
+}
+
+.soft-panel {
+  background: var(--campus-surface-muted);
+  border: 1px solid var(--campus-line);
+  border-radius: var(--campus-radius-md);
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.section-heading p {
+  margin: 5px 0 0;
+  color: var(--campus-text-soft);
+  font-size: 13px;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .status-pill {
@@ -115,8 +174,18 @@ textarea {
 }
 
 .status-created {
+  color: #8a531d;
+  background: var(--campus-orange-soft);
+}
+
+.status-confirmed {
   color: #2f5d86;
   background: #e4eef7;
+}
+
+.status-in-progress {
+  color: #315f8f;
+  background: #e7f0f8;
 }
 
 .status-paid {
@@ -144,8 +213,17 @@ textarea {
   --el-input-focus-border-color: var(--campus-green);
 }
 
+.el-button,
+.el-input,
+.el-select,
+.el-input-number,
+.el-textarea {
+  --el-border-radius-base: var(--campus-radius-sm);
+}
+
 .el-button {
   letter-spacing: 0;
+  font-weight: 600;
 }
 
 .el-button:focus-visible,
@@ -159,6 +237,19 @@ textarea {
   text-align: left;
 }
 
+.el-loading-mask {
+  background-color: rgba(250, 252, 251, 0.78);
+  backdrop-filter: blur(2px);
+}
+
+.el-dropdown-menu {
+  padding: 6px;
+}
+
+.el-dropdown-menu__item {
+  border-radius: 5px;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.18s ease;
@@ -167,4 +258,31 @@ textarea {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+@media (max-width: 720px) {
+  .page-shell {
+    padding: 16px 14px 42px;
+  }
+
+  .page-head,
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-title {
+    font-size: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

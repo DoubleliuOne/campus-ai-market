@@ -1,10 +1,16 @@
 <script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
+import { Clock3, UserRound } from 'lucide-vue-next'
 
 import ItemMedia from './ItemMedia.vue'
 import StatusPill from './StatusPill.vue'
-import { categoryName, firstImage, formatMoney } from '../utils/format'
+import {
+  categoryName,
+  firstImage,
+  formatDate,
+  formatMoney,
+} from '../utils/format'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -37,12 +43,24 @@ const linkTo = computed(() => ({
       </div>
     </div>
     <div class="card-body">
-      <div class="card-category">{{ item.categoryName || '校园闲置' }}</div>
+      <div class="card-topline">
+        <span class="card-category">{{ item.categoryName || '校园闲置' }}</span>
+        <StatusPill :status="item.status" />
+      </div>
       <h3 class="card-title">{{ item.title }}</h3>
       <p v-if="item.description" class="card-description">{{ item.description }}</p>
       <div class="card-meta">
         <span class="card-price">{{ formatMoney(item.price) }}</span>
-        <span class="card-seller">{{ item.sellerUsername }}</span>
+      </div>
+      <div class="card-foot">
+        <span class="card-seller">
+          <UserRound :size="13" />
+          {{ item.sellerUsername || '校园用户' }}
+        </span>
+        <span class="card-time">
+          <Clock3 :size="13" />
+          {{ formatDate(item.createTime) }}
+        </span>
       </div>
     </div>
   </component>
@@ -55,7 +73,8 @@ const linkTo = computed(() => ({
   overflow: hidden;
   background: var(--campus-surface);
   border: 1px solid var(--campus-line);
-  border-radius: 8px;
+  border-radius: var(--campus-radius-md);
+  box-shadow: var(--campus-shadow-sm);
   transition:
     transform 0.16s ease,
     box-shadow 0.16s ease,
@@ -63,9 +82,9 @@ const linkTo = computed(() => ({
 }
 
 .product-card:hover {
-  border-color: #c5d8cf;
-  box-shadow: 0 8px 24px rgba(31, 55, 45, 0.08);
-  transform: translateY(-2px);
+  border-color: #b9d4c8;
+  box-shadow: var(--campus-shadow-md);
+  transform: translateY(-3px);
 }
 
 .product-card.is-unavailable {
@@ -93,9 +112,16 @@ const linkTo = computed(() => ({
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
   padding: 13px 14px 14px;
+}
+
+.card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .card-category {
@@ -149,11 +175,32 @@ const linkTo = computed(() => ({
 }
 
 .card-seller {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
   color: #75817c;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #edf0ee;
+}
+
+.card-time {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  color: #8a948f;
+  font-size: 11px;
 }
 </style>

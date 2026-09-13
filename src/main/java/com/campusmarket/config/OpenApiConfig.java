@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
         info = @Info(
                 title = "CampusAI Market API",
                 version = "v1",
-                description = "校园二手交易、收藏、订单与 AI Agent/RAG 接口文档",
+                description = "校园二手交易、图片、收藏、订单状态机、AI 会话与 RAG 接口文档",
                 contact = @Contact(name = "CampusAI Market")
         )
 )

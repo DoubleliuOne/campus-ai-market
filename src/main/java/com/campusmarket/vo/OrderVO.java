@@ -24,7 +24,8 @@ public class OrderVO {
     @Schema(description = "订单价格", example = "99.00")
     private BigDecimal price;
 
-    @Schema(description = "订单状态", allowableValues = {"CREATED", "PAID", "COMPLETED", "CANCELLED"},
+    @Schema(description = "订单状态",
+            allowableValues = {"CREATED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"},
             example = "CREATED")
     private String status;
 

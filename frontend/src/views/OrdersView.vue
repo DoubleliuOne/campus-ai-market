@@ -1,8 +1,9 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Ban, CheckCircle2 } from 'lucide-vue-next'
+import ElMessage from 'element-plus/es/components/message/index.mjs'
+import ElMessageBox from 'element-plus/es/components/message-box/index.mjs'
+import { Ban, CheckCircle2, PackageCheck, PlayCircle } from 'lucide-vue-next'
 
 import { getMyOrdersApi, updateOrderStatusApi } from '../api'
 import EmptyState from '../components/EmptyState.vue'
@@ -25,8 +26,12 @@ const size = 8
 const loading = ref(false)
 const acting = ref(false)
 const loadError = ref('')
+let loadRequestId = 0
+
+const progressSteps = ['CREATED', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED']
 
 async function loadOrders() {
+  const requestId = ++loadRequestId
   loading.value = true
   loadError.value = ''
   try {
@@ -35,12 +40,18 @@ async function loadOrders() {
       page: page.value,
       size,
     })
-    orders.value = data.records || []
-    total.value = data.total || 0
+    if (requestId === loadRequestId) {
+      orders.value = data.records || []
+      total.value = data.total || 0
+    }
   } catch (error) {
-    loadError.value = error.message || '订单加载失败'
+    if (requestId === loadRequestId) {
+      loadError.value = error.message || '订单加载失败'
+    }
   } finally {
-    loading.value = false
+    if (requestId === loadRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -52,6 +63,9 @@ function switchRole(value) {
 }
 
 async function changeOrderStatus(order, targetStatus, confirmText) {
+  if (acting.value) {
+    return
+  }
   try {
     await ElMessageBox.confirm(confirmText, '订单操作', {
       confirmButtonText: '确认',
@@ -80,6 +94,14 @@ function changePage(next) {
   page.value = next
   loadOrders()
   window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function stepIndex(status) {
+  return progressSteps.indexOf(status)
+}
+
+function canCancel(order) {
+  return ['CREATED', 'CONFIRMED'].includes(order.status)
 }
 
 watch(
@@ -141,14 +163,25 @@ onMounted(loadOrders)
             </template>
             <span>· {{ formatDateTime(order.createTime) }}</span>
           </p>
+          <div
+            v-if="order.status !== 'CANCELLED'"
+            class="order-progress"
+            :class="{ 'is-complete': order.status === 'COMPLETED' }"
+          >
+            <span
+              v-for="(step, index) in progressSteps"
+              :key="step"
+              :class="{ 'is-done': index <= stepIndex(order.status) }"
+            />
+          </div>
         </div>
 
         <div class="order-price">{{ formatMoney(order.price) }}</div>
 
         <div class="order-actions">
-          <template v-if="order.status === 'CREATED'">
+          <template v-if="role === 'buyer'">
             <el-button
-              v-if="role === 'buyer'"
+              v-if="canCancel(order)"
               text
               type="danger"
               :icon="Ban"
@@ -163,8 +196,45 @@ onMounted(loadOrders)
             >
               取消订单
             </el-button>
+            <span v-else class="order-note">
+              {{ order.status === 'COMPLETED' ? '交易已完成' : '已结束的交易' }}
+            </span>
+          </template>
+          <template v-else>
             <el-button
-              v-else
+              v-if="order.status === 'CREATED'"
+              text
+              type="primary"
+              :icon="PackageCheck"
+              :disabled="acting"
+              @click="
+                changeOrderStatus(
+                  order,
+                  'CONFIRMED',
+                  `确认接单 #${order.id}？确认后请与买家约定交易方式。`,
+                )
+              "
+            >
+              确认接单
+            </el-button>
+            <el-button
+              v-else-if="order.status === 'CONFIRMED'"
+              text
+              type="primary"
+              :icon="PlayCircle"
+              :disabled="acting"
+              @click="
+                changeOrderStatus(
+                  order,
+                  'IN_PROGRESS',
+                  `将订单 #${order.id} 标记为交易中？`,
+                )
+              "
+            >
+              开始交易
+            </el-button>
+            <el-button
+              v-else-if="order.status === 'IN_PROGRESS'"
               text
               type="primary"
               :icon="CheckCircle2"
@@ -177,10 +247,31 @@ onMounted(loadOrders)
                 )
               "
             >
-              确认完成
+              完成订单
             </el-button>
+            <el-button
+              v-if="canCancel(order)"
+              text
+              type="danger"
+              :icon="Ban"
+              :disabled="acting"
+              @click="
+                changeOrderStatus(
+                  order,
+                  'CANCELLED',
+                  `确认取消订单 #${order.id}？取消后商品会恢复在售。`,
+                )
+              "
+            >
+              取消订单
+            </el-button>
+            <span
+              v-if="!canCancel(order) && !['CREATED', 'CONFIRMED', 'IN_PROGRESS'].includes(order.status)"
+              class="order-note"
+            >
+              {{ order.status === 'COMPLETED' ? '交易已完成' : '已结束的交易' }}
+            </span>
           </template>
-          <span v-else class="order-note">已结束的交易</span>
         </div>
       </div>
     </div>
@@ -276,6 +367,28 @@ onMounted(loadOrders)
   margin: 6px 0 0;
   color: #7e8a84;
   font-size: 12px;
+}
+
+.order-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(22px, 1fr));
+  gap: 5px;
+  max-width: 260px;
+  margin-top: 10px;
+}
+
+.order-progress span {
+  height: 3px;
+  background: #e2e8e5;
+  border-radius: 999px;
+}
+
+.order-progress span.is-done {
+  background: var(--campus-green);
+}
+
+.order-progress.is-complete span {
+  background: var(--campus-green);
 }
 
 .order-price {

@@ -6,9 +6,11 @@ erDiagram
     USER ||--o{ FAVORITE : creates
     USER ||--o{ ORDERS : buys
     USER ||--o{ ORDERS : sells
+    USER ||--o{ AI_CONVERSATION : owns
     CATEGORY ||--o{ ITEM : classifies
     ITEM ||--o{ FAVORITE : receives
     ITEM ||--o{ ORDERS : generates
+    AI_CONVERSATION ||--o{ AI_MESSAGE : contains
 
     USER {
         BIGINT id PK
@@ -55,13 +57,30 @@ erDiagram
         DATETIME create_time
         DATETIME update_time
     }
+
+    AI_CONVERSATION {
+        BIGINT id PK
+        BIGINT user_id FK
+        VARCHAR title
+        DATETIME create_time
+        DATETIME update_time
+    }
+
+    AI_MESSAGE {
+        BIGINT id PK
+        BIGINT conversation_id FK
+        VARCHAR role
+        TEXT content
+        DATETIME create_time
+    }
 ```
 
 ## 状态说明
 
 - `item.status`：`ON_SALE`、`SOLD`、`OFF_SHELF`
-- `orders.status`：`CREATED`、`PAID`、`COMPLETED`、`CANCELLED`
+- `orders.status`：`CREATED`、`CONFIRMED`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`
 - `favorite` 对 `(user_id, item_id)` 建立唯一约束，防止重复收藏。
 - 金额字段使用 `DECIMAL(10,2)`，订单中的 `price` 是下单时的价格快照。
+- `ai_conversation.user_id` 隔离不同用户；删除会话时 `ai_message` 级联删除。
 
 [返回 README](../README.md)

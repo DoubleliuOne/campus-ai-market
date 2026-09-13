@@ -19,14 +19,20 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -36,6 +42,10 @@ public class ItemService {
 
     private static final String HOT_ITEMS_KEY = "cache:item:hot";
     private static final long HOT_ITEMS_TTL_SECONDS = 300L;
+    private static final String SEARCH_CACHE_VERSION_KEY = "cache:item:search:v1:version";
+    private static final String SEARCH_CACHE_PREFIX = "cache:item:search:v1:";
+    private static final long SEARCH_CACHE_TTL_SECONDS = 90L;
+    private static final String INITIAL_SEARCH_CACHE_VERSION = "0";
 
     private final ItemMapper itemMapper;
     private final CategoryMapper categoryMapper;
@@ -63,7 +73,7 @@ public class ItemService {
         item.setStatus("ON_SALE");
 
         itemMapper.insert(item);
-        evictHotCache();
+        evictItemCaches();
         return item.getId();
     }
 
@@ -73,10 +83,22 @@ public class ItemService {
             throw new BusinessException("商品当前状态不能修改");
         }
 
-        applyItemContent(item, request.getTitle(), request.getDescription(), request.getPrice(),
+        Item content = new Item();
+        applyItemContent(content, request.getTitle(), request.getDescription(), request.getPrice(),
                 request.getCategoryId(), request.getImages());
-        itemMapper.updateById(item);
-        evictHotCache();
+        int updated = itemMapper.update(null, Wrappers.<Item>lambdaUpdate()
+                .eq(Item::getId, id)
+                .eq(Item::getSellerId, loginUser.id())
+                .eq(Item::getStatus, "ON_SALE")
+                .set(Item::getTitle, content.getTitle())
+                .set(Item::getDescription, content.getDescription())
+                .set(Item::getPrice, content.getPrice())
+                .set(Item::getCategoryId, content.getCategoryId())
+                .set(Item::getImages, content.getImages()));
+        if (updated != 1) {
+            throw new BusinessException("商品状态已发生变化，请刷新后重试");
+        }
+        evictItemCaches();
     }
 
     public void takeOffShelf(Long id, LoginUser loginUser) {
@@ -88,9 +110,32 @@ public class ItemService {
             return;
         }
 
-        item.setStatus("OFF_SHELF");
-        itemMapper.updateById(item);
-        evictHotCache();
+        int updated = itemMapper.update(null, Wrappers.<Item>lambdaUpdate()
+                .eq(Item::getId, id)
+                .eq(Item::getSellerId, loginUser.id())
+                .eq(Item::getStatus, "ON_SALE")
+                .set(Item::getStatus, "OFF_SHELF"));
+        if (updated != 1) {
+            throw new BusinessException("商品状态已发生变化，请刷新后重试");
+        }
+        evictItemCaches();
+    }
+
+    public void relist(Long id, LoginUser loginUser) {
+        Item item = getOwnedItem(id, loginUser);
+        if (!"OFF_SHELF".equals(item.getStatus())) {
+            throw new BusinessException("只有已下架商品可以重新上架");
+        }
+
+        int updated = itemMapper.update(null, Wrappers.<Item>lambdaUpdate()
+                .eq(Item::getId, id)
+                .eq(Item::getSellerId, loginUser.id())
+                .eq(Item::getStatus, "OFF_SHELF")
+                .set(Item::getStatus, "ON_SALE"));
+        if (updated != 1) {
+            throw new BusinessException("商品状态已发生变化，请刷新后重试");
+        }
+        evictItemCaches();
     }
 
     public List<ItemVO> getHotItems() {
@@ -130,6 +175,29 @@ public class ItemService {
         }
     }
 
+    public void evictItemCaches() {
+        evictHotCache();
+        try {
+            redisTemplate.opsForValue().increment(SEARCH_CACHE_VERSION_KEY);
+        } catch (RuntimeException ignored) {
+            // Redis unavailable: versioned search keys will expire by TTL.
+        }
+    }
+
+    public void evictItemCachesAfterCommit() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    evictItemCaches();
+                }
+            });
+            return;
+        }
+        evictItemCaches();
+    }
+
     private Item getOwnedItem(Long id, LoginUser loginUser) {
         Item item = itemMapper.selectById(id);
         if (item == null || !item.getSellerId().equals(loginUser.id())) {
@@ -157,6 +225,9 @@ public class ItemService {
         if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException("商品价格必须大于0");
         }
+        if (images != null && images.size() > 5) {
+            throw new BusinessException("最多只能保存5张商品图片");
+        }
 
         Category category = categoryMapper.selectById(categoryId);
         if (category == null) {
@@ -174,13 +245,35 @@ public class ItemService {
                                      Long categoryId,
                                      BigDecimal minPrice,
                                      BigDecimal maxPrice,
+                                     String sort,
                                      long page,
                                      long size) {
         if (page < 1 || size < 1 || size > 100) {
             throw new BusinessException("分页参数不正确");
         }
+        if (minPrice != null && minPrice.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("最低价格不能小于0");
+        }
+        if (maxPrice != null && maxPrice.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("最高价格不能小于0");
+        }
         if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
             throw new BusinessException("最低价格不能大于最高价格");
+        }
+
+        String normalizedKeyword = trimToNull(keyword);
+        String normalizedSort = normalizeSort(sort);
+        String cacheKey = buildSearchCacheKey(
+                normalizedKeyword, categoryId, minPrice, maxPrice, normalizedSort, page, size);
+
+        try {
+            String cached = redisTemplate.opsForValue().get(cacheKey);
+            if (StringUtils.hasText(cached)) {
+                return objectMapper.readValue(cached, new TypeReference<PageResult<ItemVO>>() {
+                });
+            }
+        } catch (RuntimeException | JsonProcessingException ignored) {
+            // Redis unavailable or cache data invalid: fall through to MySQL.
         }
 
         LambdaQueryWrapper<Item> queryWrapper = Wrappers.lambdaQuery();
@@ -189,15 +282,96 @@ public class ItemService {
                 .eq(categoryId != null, Item::getCategoryId, categoryId)
                 .ge(minPrice != null, Item::getPrice, minPrice)
                 .le(maxPrice != null, Item::getPrice, maxPrice)
-                .and(StringUtils.hasText(keyword), wrapper -> wrapper
-                        .like(Item::getTitle, keyword)
+                .and(normalizedKeyword != null, wrapper -> wrapper
+                        .like(Item::getTitle, normalizedKeyword)
                         .or()
-                        .like(Item::getDescription, keyword))
-                .orderByDesc(Item::getCreateTime);
+                        .like(Item::getDescription, normalizedKeyword));
+
+        if ("priceAsc".equals(normalizedSort)) {
+            queryWrapper.orderByAsc(Item::getPrice).orderByDesc(Item::getCreateTime);
+        } else if ("priceDesc".equals(normalizedSort)) {
+            queryWrapper.orderByDesc(Item::getPrice).orderByDesc(Item::getCreateTime);
+        } else {
+            queryWrapper.orderByDesc(Item::getCreateTime);
+        }
 
         Page<Item> itemPage = itemMapper.selectPage(new Page<>(page, size), queryWrapper);
         List<Item> records = itemPage.getRecords();
-        return new PageResult<>(toItemVOs(records), itemPage.getTotal(), itemPage.getCurrent(), itemPage.getSize());
+        PageResult<ItemVO> result = new PageResult<>(toItemVOs(records),
+                itemPage.getTotal(), itemPage.getCurrent(), itemPage.getSize());
+
+        try {
+            redisTemplate.opsForValue().set(cacheKey,
+                    objectMapper.writeValueAsString(result),
+                    SEARCH_CACHE_TTL_SECONDS,
+                    TimeUnit.SECONDS);
+        } catch (RuntimeException | JsonProcessingException ignored) {
+            // Cache write failure should not break the business request.
+        }
+        return result;
+    }
+
+    private String normalizeSort(String sort) {
+        if (!StringUtils.hasText(sort)) {
+            return "latest";
+        }
+        return switch (sort.trim()) {
+            case "priceAsc", "priceDesc", "latest" -> sort.trim();
+            default -> throw new BusinessException("排序方式不正确");
+        };
+    }
+
+    private String buildSearchCacheKey(String keyword,
+                                       Long categoryId,
+                                       BigDecimal minPrice,
+                                       BigDecimal maxPrice,
+                                       String sort,
+                                       long page,
+                                       long size) {
+        String version = currentSearchCacheVersion();
+
+        String canonical = String.join("|",
+                keyword == null ? "" : keyword.toLowerCase(Locale.ROOT),
+                categoryId == null ? "" : categoryId.toString(),
+                minPrice == null ? "" : minPrice.stripTrailingZeros().toPlainString(),
+                maxPrice == null ? "" : maxPrice.stripTrailingZeros().toPlainString(),
+                sort,
+                Long.toString(page),
+                Long.toString(size));
+        return SEARCH_CACHE_PREFIX + version + ":" + sha256(canonical);
+    }
+
+    private String currentSearchCacheVersion() {
+        try {
+            String storedVersion = redisTemplate.opsForValue().get(SEARCH_CACHE_VERSION_KEY);
+            if (StringUtils.hasText(storedVersion)) {
+                return storedVersion;
+            }
+
+            Boolean initialized = redisTemplate.opsForValue()
+                    .setIfAbsent(SEARCH_CACHE_VERSION_KEY, INITIAL_SEARCH_CACHE_VERSION);
+            if (Boolean.TRUE.equals(initialized)) {
+                return INITIAL_SEARCH_CACHE_VERSION;
+            }
+
+            String initializedVersion = redisTemplate.opsForValue().get(SEARCH_CACHE_VERSION_KEY);
+            return StringUtils.hasText(initializedVersion)
+                    ? initializedVersion
+                    : INITIAL_SEARCH_CACHE_VERSION;
+        } catch (RuntimeException ignored) {
+            // A local fallback version still produces a valid short-lived key.
+            return INITIAL_SEARCH_CACHE_VERSION;
+        }
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(
+                    digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 algorithm unavailable", ex);
+        }
     }
 
     public PageResult<ItemVO> myItems(LoginUser loginUser,
@@ -222,24 +396,24 @@ public class ItemService {
     }
 
     public ItemVO getDetail(Long id) {
+        return getDetailForUser(id, null);
+    }
+
+    public ItemVO getDetailForUser(Long id, LoginUser loginUser) {
         Item item = itemMapper.selectById(id);
-        if (item == null || !"ON_SALE".equals(item.getStatus())) {
+        if (item == null) {
             throw new BusinessException("商品不存在或已下架");
         }
-
-        Map<Long, String> usernameMap = new HashMap<>();
-        Map<Long, String> categoryNameMap = new HashMap<>();
-
-        User seller = userMapper.selectById(item.getSellerId());
-        Category category = categoryMapper.selectById(item.getCategoryId());
-        if (seller != null) {
-            usernameMap.put(seller.getId(), seller.getUsername());
+        boolean owner = loginUser != null && item.getSellerId().equals(loginUser.id());
+        if (!owner && !"ON_SALE".equals(item.getStatus())) {
+            throw new BusinessException("商品不存在或已下架");
         }
-        if (category != null) {
-            categoryNameMap.put(category.getId(), category.getName());
-        }
+        return toItemVOs(List.of(item)).get(0);
+    }
 
-        return toItemVO(item, usernameMap, categoryNameMap);
+    public ItemVO getOwnedDetail(Long id, LoginUser loginUser) {
+        Item item = getOwnedItem(id, loginUser);
+        return toItemVOs(List.of(item)).get(0);
     }
 
     public List<ItemVO> toItemVOs(List<Item> items) {
@@ -289,8 +463,18 @@ public class ItemService {
         if (images == null || images.isEmpty()) {
             return null;
         }
+        List<String> normalizedImages = images.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .filter(image -> image.length() <= 500)
+                .distinct()
+                .limit(5)
+                .toList();
+        if (normalizedImages.isEmpty()) {
+            return null;
+        }
         try {
-            return objectMapper.writeValueAsString(images);
+            return objectMapper.writeValueAsString(normalizedImages);
         } catch (JsonProcessingException ex) {
             throw new BusinessException("图片信息格式错误");
         }

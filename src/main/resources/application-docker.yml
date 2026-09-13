@@ -2,10 +2,15 @@ server:
   port: 8080
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 25MB
+
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://mysql:3306/campusai_market?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
     username: ${MYSQL_USERNAME:campusai}
-    password: ${MYSQL_PASSWORD:}
+    password: ${MYSQL_PASSWORD}
 
   data:
     redis:
@@ -15,20 +20,17 @@ spring:
   ai:
     openai:
       base-url: https://api.deepseek.com
-      api-key: ${DEEPSEEK_API_KEY:}
+      api-key: ${DEEPSEEK_API_KEY}
       chat:
         options:
           model: deepseek-chat
 
-    embedding:
-      transformer:
-        cache:
-          enabled: true
-        onnx:
-          model-uri: ${EMBEDDING_MODEL_URI:https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx}
-        tokenizer:
-          uri: ${EMBEDDING_TOKENIZER_URI:https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json}
-
 jwt:
-  secret: ${JWT_SECRET:docker-dev-secret-change-me-at-least-32-chars}
+  secret: ${JWT_SECRET}
   expiration-minutes: 1440
+
+app:
+  storage:
+    upload-dir: ${UPLOAD_DIR:/app/uploads}
+    max-image-size: 5242880
+    max-image-count: 5

@@ -2,15 +2,16 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import MainLayout from '../layouts/MainLayout.vue'
 import { authState, isLoggedIn, restoreSession } from '../stores/auth'
-import AssistantView from '../views/AssistantView.vue'
-import AuthView from '../views/AuthView.vue'
-import FavoritesView from '../views/FavoritesView.vue'
-import HomeView from '../views/HomeView.vue'
-import ItemDetailView from '../views/ItemDetailView.vue'
-import ItemFormView from '../views/ItemFormView.vue'
-import MyItemsView from '../views/MyItemsView.vue'
-import NotFoundView from '../views/NotFoundView.vue'
-import OrdersView from '../views/OrdersView.vue'
+
+const AuthView = () => import('../views/AuthView.vue')
+const AssistantView = () => import('../views/AssistantView.vue')
+const FavoritesView = () => import('../views/FavoritesView.vue')
+const HomeView = () => import('../views/HomeView.vue')
+const ItemDetailView = () => import('../views/ItemDetailView.vue')
+const ItemFormView = () => import('../views/ItemFormView.vue')
+const MyItemsView = () => import('../views/MyItemsView.vue')
+const NotFoundView = () => import('../views/NotFoundView.vue')
+const OrdersView = () => import('../views/OrdersView.vue')
 
 const router = createRouter({
   history: createWebHistory(),

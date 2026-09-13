@@ -1,10 +1,11 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Eye, PackagePlus, Pencil, Power } from 'lucide-vue-next'
+import ElMessage from 'element-plus/es/components/message/index.mjs'
+import ElMessageBox from 'element-plus/es/components/message-box/index.mjs'
+import { Eye, PackagePlus, Pencil, Power, RotateCcw } from 'lucide-vue-next'
 
-import { getMyItemsApi, takeOffItemApi } from '../api'
+import { getMyItemsApi, relistItemApi, takeOffItemApi } from '../api'
 import EmptyState from '../components/EmptyState.vue'
 import ItemMedia from '../components/ItemMedia.vue'
 import StatusPill from '../components/StatusPill.vue'
@@ -30,9 +31,12 @@ const total = ref(0)
 const page = ref(1)
 const size = 8
 const loading = ref(false)
+const actingId = ref(null)
 const loadError = ref('')
+let loadRequestId = 0
 
 async function loadItems() {
+  const requestId = ++loadRequestId
   loading.value = true
   loadError.value = ''
   try {
@@ -41,12 +45,18 @@ async function loadItems() {
       page: page.value,
       size,
     })
-    items.value = data.records || []
-    total.value = data.total || 0
+    if (requestId === loadRequestId) {
+      items.value = data.records || []
+      total.value = data.total || 0
+    }
   } catch (error) {
-    loadError.value = error.message || '商品加载失败'
+    if (requestId === loadRequestId) {
+      loadError.value = error.message || '商品加载失败'
+    }
   } finally {
-    loading.value = false
+    if (requestId === loadRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -57,6 +67,9 @@ function switchTab(value) {
 }
 
 async function takeOffShelf(item) {
+  if (actingId.value !== null) {
+    return
+  }
   try {
     await ElMessageBox.confirm(`确认下架“${item.title}”吗？`, '下架商品', {
       confirmButtonText: '确认下架',
@@ -67,6 +80,7 @@ async function takeOffShelf(item) {
     return
   }
 
+  actingId.value = item.id
   try {
     await takeOffItemApi(item.id)
     ElMessage.success('商品已下架')
@@ -75,7 +89,49 @@ async function takeOffShelf(item) {
     if (error.status !== 401) {
       ElMessage.error(error.message)
     }
+  } finally {
+    actingId.value = null
   }
+}
+
+async function relist(item) {
+  if (actingId.value !== null) {
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认重新上架“${item.title}”吗？商品会恢复展示并可被购买。`,
+      '重新上架',
+      {
+        confirmButtonText: '确认上架',
+        cancelButtonText: '取消',
+        type: 'info',
+      },
+    )
+  } catch {
+    return
+  }
+
+  actingId.value = item.id
+  try {
+    await relistItemApi(item.id)
+    ElMessage.success('商品已重新上架')
+    await loadItems()
+  } catch (error) {
+    if (error.status !== 401) {
+      ElMessage.error(error.message)
+    }
+  } finally {
+    actingId.value = null
+  }
+}
+
+function viewItem(item) {
+  router.push({
+    name: 'item-detail',
+    params: { id: item.id },
+    query: { manage: '1' },
+  })
 }
 
 function changePage(next) {
@@ -135,7 +191,7 @@ onMounted(loadItems)
             <el-button
               text
               :icon="Eye"
-              @click="router.push({ name: 'item-detail', params: { id: item.id } })"
+              @click="viewItem(item)"
             >
               查看
             </el-button>
@@ -146,11 +202,34 @@ onMounted(loadItems)
             >
               编辑
             </el-button>
-            <el-button text type="danger" :icon="Power" @click="takeOffShelf(item)">
+            <el-button
+              text
+              type="danger"
+              :icon="Power"
+              :loading="actingId === item.id"
+              :disabled="actingId !== null"
+              @click="takeOffShelf(item)"
+            >
               下架
             </el-button>
           </template>
-          <span v-else class="row-note">该状态不可编辑</span>
+          <template v-else-if="item.status === 'OFF_SHELF'">
+            <el-button text :icon="Eye" @click="viewItem(item)">查看</el-button>
+            <el-button
+              text
+              type="primary"
+              :icon="RotateCcw"
+              :loading="actingId === item.id"
+              :disabled="actingId !== null"
+              @click="relist(item)"
+            >
+              重新上架
+            </el-button>
+          </template>
+          <template v-else>
+            <el-button text :icon="Eye" @click="viewItem(item)">查看</el-button>
+            <span class="row-note">已售商品不可再次上架</span>
+          </template>
         </div>
       </div>
     </div>

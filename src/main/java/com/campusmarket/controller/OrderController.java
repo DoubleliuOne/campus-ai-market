@@ -65,7 +65,8 @@ public class OrderController {
     }
 
     @PatchMapping("/{id}/status")
-    @Operation(summary = "修改订单状态", description = "买家可取消，卖家可完成")
+    @Operation(summary = "修改订单状态",
+            description = "卖家确认、开始交易、完成订单；买卖双方可在交易完成前取消")
     public ApiResponse<Void> updateStatus(
             @PathVariable @Positive(message = "订单id必须为正数") Long id,
             @Valid @RequestBody UpdateOrderStatusRequest request,

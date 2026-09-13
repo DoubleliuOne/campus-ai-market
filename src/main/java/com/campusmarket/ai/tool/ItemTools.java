@@ -2,12 +2,14 @@ package com.campusmarket.ai.tool;
 
 import com.campusmarket.common.PageResult;
 import com.campusmarket.exception.BusinessException;
+import com.campusmarket.security.LoginUser;
 import com.campusmarket.service.ItemService;
 import com.campusmarket.vo.ItemVO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -31,7 +33,11 @@ public class ItemTools {
             @ToolParam(required = false, description = "最低价格") Double minPrice,
             @ToolParam(required = false, description = "最高价格") Double maxPrice,
             @ToolParam(required = false, description = "页码，默认1") Integer page,
-            @ToolParam(required = false, description = "每页数量，默认5") Integer size) {
+            @ToolParam(required = false, description = "每页数量，默认5") Integer size,
+            ToolContext toolContext) {
+        if (!hasBudget(toolContext)) {
+            return "工具调用次数已达上限，请根据已有结果继续回答。";
+        }
         try {
             int currentPage = page == null || page < 1 ? 1 : page;
             int pageSize = size == null || size < 1 ? 5 : Math.min(size, 20);
@@ -41,6 +47,7 @@ public class ItemTools {
                     categoryId,
                     minPrice == null ? null : BigDecimal.valueOf(minPrice),
                     maxPrice == null ? null : BigDecimal.valueOf(maxPrice),
+                    "latest",
                     currentPage,
                     pageSize);
             return objectMapper.writeValueAsString(result);
@@ -48,20 +55,29 @@ public class ItemTools {
             return "查询失败：" + ex.getMessage();
         } catch (JsonProcessingException ex) {
             return "查询结果序列化失败";
+        } catch (RuntimeException ex) {
+            return "商品搜索暂时不可用，请稍后重试。";
         }
     }
 
     @Tool(name = "getItemDetail",
             description = "按商品id查询当前正在出售的商品详情")
     public String getItemDetail(
-            @ToolParam(required = true, description = "商品id") Long itemId) {
+            @ToolParam(required = true, description = "商品id") Long itemId,
+            ToolContext toolContext) {
+        if (!hasBudget(toolContext)) {
+            return "工具调用次数已达上限，请根据已有结果继续回答。";
+        }
         try {
-            ItemVO detail = itemService.getDetail(itemId);
+            LoginUser loginUser = currentUser(toolContext);
+            ItemVO detail = itemService.getDetailForUser(itemId, loginUser);
             return objectMapper.writeValueAsString(detail);
         } catch (BusinessException ex) {
             return "查询失败：" + ex.getMessage();
         } catch (JsonProcessingException ex) {
             return "商品详情序列化失败";
+        } catch (RuntimeException ex) {
+            return "商品详情暂时不可用，请稍后重试。";
         }
     }
 
@@ -71,7 +87,31 @@ public class ItemTools {
             @ToolParam(required = false, description = "用户想要的商品类型，例如机械键盘、安卓手机、教材") String keyword,
             @ToolParam(required = false, description = "商品分类id") Long categoryId,
             @ToolParam(required = false, description = "用户能接受的最高价格") Double maxPrice,
-            @ToolParam(required = false, description = "其他推荐说明") String note) {
-        return searchItems(keyword, categoryId, null, maxPrice, 1, 10);
+            @ToolParam(required = false, description = "其他推荐说明") String note,
+            ToolContext toolContext) {
+        return searchItems(keyword, categoryId, null, maxPrice, 1, 10, toolContext);
+    }
+
+    private boolean hasBudget(ToolContext toolContext) {
+        if (toolContext == null || toolContext.getContext() == null) {
+            return true;
+        }
+        Object value = toolContext.getContext().get("toolCallBudget");
+        return !(value instanceof ToolCallBudget budget) || budget.tryAcquire();
+    }
+
+    private LoginUser currentUser(ToolContext toolContext) {
+        if (toolContext == null || toolContext.getContext() == null) {
+            return null;
+        }
+        Object userId = toolContext.getContext().get("userId");
+        if (userId == null) {
+            return null;
+        }
+        try {
+            return new LoginUser(Long.valueOf(String.valueOf(userId)), null);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 }

@@ -1,11 +1,22 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Bot, FilterX, Search } from 'lucide-vue-next'
+import { nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  ArrowRight,
+  Bot,
+  FilterX,
+  Search,
+  ShoppingBasket,
+  Sparkles,
+  TrendingUp,
+} from 'lucide-vue-next'
 
 import { getCategoriesApi, listItemsApi } from '../api'
 import EmptyState from '../components/EmptyState.vue'
 import ProductCard from '../components/ProductCard.vue'
+
+const route = useRoute()
+const router = useRouter()
 
 const DEFAULT_CATEGORIES = [
   { id: 1, name: '数码产品' },
@@ -20,6 +31,7 @@ const filters = reactive({
   categoryId: null,
   minPrice: null,
   maxPrice: null,
+  sort: 'latest',
 })
 const applied = reactive({ ...filters })
 
@@ -31,6 +43,15 @@ const size = 12
 const loading = ref(false)
 const loaded = ref(false)
 const loadError = ref('')
+const searchInput = ref()
+const resultSection = ref()
+let loadRequestId = 0
+
+const sortOptions = [
+  { label: '最新发布', value: 'latest' },
+  { label: '价格从低到高', value: 'priceAsc' },
+  { label: '价格从高到低', value: 'priceDesc' },
+]
 
 async function loadCategories() {
   try {
@@ -46,6 +67,7 @@ async function loadCategories() {
 }
 
 async function loadItems() {
+  const requestId = ++loadRequestId
   loading.value = true
   loadError.value = ''
   try {
@@ -54,16 +76,23 @@ async function loadItems() {
       categoryId: applied.categoryId || undefined,
       minPrice: applied.minPrice ?? undefined,
       maxPrice: applied.maxPrice ?? undefined,
+      sort: applied.sort,
       page: page.value,
       size,
     })
-    items.value = data.records || []
-    total.value = data.total || 0
-    loaded.value = true
+    if (requestId === loadRequestId) {
+      items.value = data.records || []
+      total.value = data.total || 0
+      loaded.value = true
+    }
   } catch (error) {
-    loadError.value = error.message || '商品加载失败'
+    if (requestId === loadRequestId) {
+      loadError.value = error.message || '商品加载失败'
+    }
   } finally {
-    loading.value = false
+    if (requestId === loadRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -73,11 +102,18 @@ function search() {
   loadItems()
 }
 
+function sortChanged() {
+  applied.sort = filters.sort
+  page.value = 1
+  loadItems()
+}
+
 function resetFilters() {
   filters.keyword = ''
   filters.categoryId = null
   filters.minPrice = null
   filters.maxPrice = null
+  filters.sort = 'latest'
   search()
 }
 
@@ -92,42 +128,81 @@ function changePage(next) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
+async function focusSearch() {
+  await nextTick()
+  searchInput.value?.focus()
+  resultSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function startAiSearch() {
+  router.push({
+    name: 'assistant',
+    query: filters.keyword ? { prompt: filters.keyword } : {},
+  })
+}
+
+watch(
+  () => route.query.focus,
+  (value) => {
+    if (value === 'search') {
+      focusSearch()
+      router.replace({ query: {} })
+    }
+  },
+)
+
 onMounted(() => {
   loadCategories()
   loadItems()
+  if (route.query.focus === 'search') {
+    focusSearch()
+  }
 })
 </script>
 
 <template>
   <div class="page-shell home-page">
-    <section class="market-head">
-      <div class="market-heading">
-        <h1 class="page-title">校园二手集市</h1>
-        <p>从同学手中找到需要的数码、教材与生活用品</p>
+    <section class="market-hero">
+      <div class="hero-copy">
+        <span class="hero-kicker">
+          <Sparkles :size="14" />
+          真实商品数据 + AI 智能检索
+        </span>
+        <h1>让每一件校园闲置，找到真正需要它的人。</h1>
+        <p>搜索同学发布的数码、教材和生活用品，也可以直接告诉 AI 你的预算与需求。</p>
       </div>
-      <RouterLink to="/assistant" class="ai-entry">
-        <Bot :size="16" />
-        <span>AI 助手</span>
-      </RouterLink>
+      <button type="button" class="hero-ai" @click="startAiSearch">
+        <span class="hero-ai-icon"><Bot :size="21" /></span>
+        <span>
+          <strong>问问 CampusAI</strong>
+          <small>用自然语言找商品、查规则、看订单</small>
+        </span>
+        <ArrowRight :size="17" />
+      </button>
     </section>
 
     <section class="toolbar search-toolbar" aria-label="商品搜索">
       <div class="keyword-row">
         <el-input
+          ref="searchInput"
           v-model="filters.keyword"
           size="large"
           clearable
-          placeholder="搜索商品关键词"
+          placeholder="搜索商品名称、品牌或用途"
           @keyup.enter="search"
           @clear="search"
         >
           <template #prefix><Search :size="17" /></template>
+          <template #append>
+            <el-button type="primary" :icon="Search" @click="search">搜索</el-button>
+          </template>
         </el-input>
-        <el-button type="primary" size="large" :icon="Search" @click="search">
-          搜索
-        </el-button>
       </div>
       <div class="filter-row">
+        <div class="filter-label">
+          <TrendingUp :size="15" />
+          价格区间
+        </div>
         <div class="price-group">
           <el-input-number
             v-model="filters.minPrice"
@@ -137,7 +212,7 @@ onMounted(() => {
             controls-position="right"
             placeholder="最低价"
           />
-          <span class="price-sep">-</span>
+          <span class="price-sep">至</span>
           <el-input-number
             v-model="filters.maxPrice"
             :min="0"
@@ -147,10 +222,12 @@ onMounted(() => {
             placeholder="最高价"
           />
         </div>
-        <el-button class="reset-button" text @click="resetFilters">
-          <FilterX :size="15" />
-          重置
-        </el-button>
+        <div class="filter-actions">
+          <el-button class="reset-button" plain :icon="FilterX" @click="resetFilters">
+            重置
+          </el-button>
+          <el-button type="primary" plain :icon="Search" @click="search">应用筛选</el-button>
+        </div>
       </div>
       <div class="category-row">
         <button
@@ -174,21 +251,38 @@ onMounted(() => {
       </div>
     </section>
 
-    <div class="result-bar">
-      <span>共 {{ total }} 件在售商品</span>
-      <span v-if="applied.keyword" class="result-keyword">“{{ applied.keyword }}”</span>
+    <div ref="resultSection" class="result-bar">
+      <div>
+        <strong>在售商品</strong>
+        <span>共 {{ total }} 件</span>
+        <span v-if="applied.keyword" class="result-keyword">“{{ applied.keyword }}”</span>
+      </div>
+      <el-select
+        v-model="filters.sort"
+        class="sort-select"
+        aria-label="商品排序"
+        @change="sortChanged"
+      >
+        <el-option
+          v-for="option in sortOptions"
+          :key="option.value"
+          :label="option.label"
+          :value="option.value"
+        />
+      </el-select>
     </div>
 
     <div v-loading="loading" class="market-content">
-      <div v-if="items.length" class="product-grid">
+      <transition-group v-if="items.length" name="product-list" tag="div" class="product-grid">
         <ProductCard v-for="item in items" :key="item.id" :item="item" />
-      </div>
+      </transition-group>
       <EmptyState
         v-else-if="!loading && !loadError"
         title="没有找到符合条件的商品"
-        description="换一个关键词或放宽价格范围再试试"
+        description="换一个关键词或放宽价格范围，也可以让 AI 帮你重新描述需求"
       >
         <el-button type="primary" plain @click="resetFilters">查看全部商品</el-button>
+        <el-button type="primary" :icon="Bot" @click="startAiSearch">让 AI 帮我找</el-button>
       </EmptyState>
       <EmptyState
         v-else-if="!loading && loadError"
@@ -214,39 +308,106 @@ onMounted(() => {
 
 <style scoped>
 .home-page {
-  padding-top: 28px;
+  padding-top: 22px;
 }
 
-.market-head {
+.market-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 26px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 30px 32px;
+  color: #f4fbf8;
+  background: #155b49;
+  border-radius: var(--campus-radius-md);
+  box-shadow: 0 16px 42px rgba(21, 91, 73, 0.16);
+}
+
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #b8e3d4;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.hero-copy h1 {
+  max-width: 650px;
+  margin: 12px 0 0;
+  color: #fff;
+  font-size: clamp(25px, 3vw, 36px);
+  font-weight: 780;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.hero-copy p {
+  max-width: 670px;
+  margin: 12px 0 0;
+  color: rgba(244, 251, 248, 0.72);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.hero-ai {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 12px;
+  width: 100%;
+  padding: 15px;
+  color: #143c31;
+  background: #f7fbf9;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--campus-radius-md);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
-.market-heading p {
-  margin: 7px 0 0;
-  color: var(--campus-text);
-  font-size: 14px;
+.hero-ai:hover {
+  box-shadow: 0 10px 26px rgba(10, 48, 37, 0.18);
+  transform: translateY(-2px);
 }
 
-.ai-entry {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 7px;
-  height: 38px;
-  padding: 0 13px;
+.hero-ai-icon {
+  display: grid;
+  flex: 0 0 42px;
+  place-items: center;
+  width: 42px;
+  height: 42px;
   color: #fff;
-  background: #256e8f;
-  border-radius: 6px;
+  background: var(--campus-blue);
+  border-radius: var(--campus-radius-sm);
+}
+
+.hero-ai > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero-ai strong,
+.hero-ai small {
+  display: block;
+}
+
+.hero-ai strong {
   font-size: 14px;
-  font-weight: 650;
+}
+
+.hero-ai small {
+  margin-top: 4px;
+  color: #65726c;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .search-toolbar {
-  padding: 16px;
+  padding: 18px;
 }
 
 .keyword-row {
@@ -254,12 +415,32 @@ onMounted(() => {
   gap: 10px;
 }
 
+.keyword-row :deep(.el-input-group__append) {
+  padding: 0;
+  background: var(--campus-green);
+  border-color: var(--campus-green);
+}
+
+.keyword-row :deep(.el-input-group__append .el-button) {
+  height: 38px;
+  padding: 0 22px;
+  color: #fff;
+}
+
 .filter-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 14px;
+  gap: 12px;
   margin-top: 12px;
+}
+
+.filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--campus-text);
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .price-group {
@@ -274,6 +455,13 @@ onMounted(() => {
 
 .price-sep {
   color: #8a948f;
+  font-size: 12px;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .reset-button {
@@ -315,10 +503,26 @@ onMounted(() => {
 .result-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 46px;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
   color: #6a7670;
   font-size: 13px;
+}
+
+.result-bar > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.result-bar strong {
+  color: var(--campus-ink);
+  font-size: 17px;
+}
+
+.sort-select {
+  width: 150px;
 }
 
 .result-keyword {
@@ -334,8 +538,21 @@ onMounted(() => {
 
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+  gap: 18px;
+}
+
+.product-list-enter-active,
+.product-list-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.product-list-enter-from,
+.product-list-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .pagination-row {
@@ -344,10 +561,26 @@ onMounted(() => {
   margin-top: 28px;
 }
 
+@media (max-width: 920px) {
+  .market-hero {
+    grid-template-columns: 1fr;
+    padding: 26px;
+  }
+
+  .hero-ai {
+    max-width: 480px;
+  }
+}
+
 @media (max-width: 720px) {
-  .market-head {
-    align-items: flex-start;
-    flex-direction: column;
+  .market-hero {
+    gap: 20px;
+    margin-bottom: 14px;
+    padding: 22px 18px;
+  }
+
+  .hero-copy h1 {
+    font-size: 25px;
   }
 
   .keyword-row {
@@ -356,7 +589,8 @@ onMounted(() => {
 
   .filter-row {
     justify-content: space-between;
-    align-items: flex-end;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .price-group {
@@ -368,6 +602,15 @@ onMounted(() => {
     width: auto;
   }
 
+  .filter-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .filter-actions :deep(.el-button) {
+    flex: 1;
+  }
+
   .category-row {
     flex-wrap: nowrap;
     margin-right: -14px;
@@ -377,6 +620,16 @@ onMounted(() => {
 
   .category-chip {
     flex-shrink: 0;
+  }
+
+  .result-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 14px 0;
+  }
+
+  .sort-select {
+    width: 100%;
   }
 }
 </style>

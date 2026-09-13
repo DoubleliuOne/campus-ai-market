@@ -3,7 +3,8 @@ WORKDIR /app
 
 COPY pom.xml .
 COPY src ./src
-RUN mvn -B -Dmaven.test.skip=true clean package
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -Dmaven.test.skip=true clean package
 
 FROM eclipse-temurin:17-jre-jammy
 

@@ -10,6 +10,7 @@ import com.campusmarket.mapper.FavoriteMapper;
 import com.campusmarket.mapper.ItemMapper;
 import com.campusmarket.security.LoginUser;
 import com.campusmarket.vo.ItemVO;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -54,7 +55,11 @@ public class FavoriteService {
         Favorite favorite = new Favorite();
         favorite.setUserId(loginUser.id());
         favorite.setItemId(itemId);
-        favoriteMapper.insert(favorite);
+        try {
+            favoriteMapper.insert(favorite);
+        } catch (DuplicateKeyException ignored) {
+            // Another concurrent request already created the same favorite.
+        }
     }
 
     public boolean isFavorite(Long itemId, LoginUser loginUser) {

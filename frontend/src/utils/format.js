@@ -5,8 +5,10 @@ const ITEM_STATUS = {
 }
 
 const ORDER_STATUS = {
-  CREATED: { text: '待完成', className: 'status-created' },
+  CREATED: { text: '待确认', className: 'status-created' },
   PAID: { text: '已支付', className: 'status-paid' },
+  CONFIRMED: { text: '已确认', className: 'status-confirmed' },
+  IN_PROGRESS: { text: '交易中', className: 'status-in-progress' },
   COMPLETED: { text: '已完成', className: 'status-completed' },
   CANCELLED: { text: '已取消', className: 'status-cancelled' },
 }

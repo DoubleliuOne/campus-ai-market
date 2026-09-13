@@ -27,6 +27,12 @@ public class OrderTools {
     public String getMyOrders(
             @ToolParam(required = false, description = "buyer或seller，默认buyer") String role,
             ToolContext toolContext) {
+        if (!hasBudget(toolContext)) {
+            return "工具调用次数已达上限，请根据已有结果继续回答。";
+        }
+        if (toolContext == null || toolContext.getContext() == null) {
+            return "无法获取当前登录用户";
+        }
         Object userIdObject = toolContext.getContext().get("userId");
         if (userIdObject == null) {
             return "无法获取当前登录用户";
@@ -41,5 +47,13 @@ public class OrderTools {
         } catch (JsonProcessingException ex) {
             return "订单结果序列化失败";
         }
+    }
+
+    private boolean hasBudget(ToolContext toolContext) {
+        if (toolContext == null || toolContext.getContext() == null) {
+            return true;
+        }
+        Object value = toolContext.getContext().get("toolCallBudget");
+        return !(value instanceof ToolCallBudget budget) || budget.tryAcquire();
     }
 }

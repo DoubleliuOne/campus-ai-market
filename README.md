@@ -9,13 +9,15 @@ CampusAI Market 是一个面向校园二手交易场景的 Spring Boot + Spring 
 ## 核心功能
 
 - 用户：注册、登录、JWT 鉴权、当前用户查询、Redis 登出黑名单。
-- 商品：发布、分页搜索、分类与价格筛选、热门列表、详情、修改、下架、卖家商品列表。
+- 商品：发布、分页搜索、分类/价格/排序筛选、热门列表、详情、修改、下架、重新上架、卖家全部状态商品管理。
 - 收藏：添加、取消、是否已收藏、我的收藏。
-- 订单：创建订单、并发防超卖、买家/卖家订单查询、取消与完成。
+- 图片：本地文件上传、格式与大小校验、公开访问、Docker 数据卷持久化，同时兼容外部图片 URL。
+- 订单：创建订单、并发防超卖、买家/卖家订单查询，以及 `待确认 -> 已确认 -> 交易中 -> 已完成` 状态流转。
 - AI Agent：DeepSeek Tool Calling 调用 `searchItems`、`getItemDetail`、`getMyOrders`、`recommendItems`。
+- AI 会话：服务端保存 conversation/message，支持历史会话、多轮上下文、用户隔离和 Markdown 回答。
 - RAG：本地 `all-MiniLM-L6-v2` Embedding + `SimpleVectorStore`，回答校园交易规则。
 - 前端：Vue 3 单页应用，覆盖登录注册、市场、详情、发布编辑、收藏、订单和 AI 助手。
-- 工程化：Bean Validation、统一异常、Controller/Service 调用日志、Swagger/OpenAPI、Docker Compose。
+- 工程化：Bean Validation、统一异常、Controller/Service 调用日志、Swagger/OpenAPI、Docker Compose、Vite 分包。
 
 ## 技术栈
 
@@ -26,7 +28,7 @@ CampusAI Market 是一个面向校园二手交易场景的 Spring Boot + Spring 
 | 数据 | MyBatis-Plus 3.5.9、MySQL 8.0、Redis 7、Lettuce |
 | 鉴权 | JWT（java-jwt）、BCrypt、Redis token 黑名单 |
 | 接口文档 | SpringDoc OpenAPI 2.8.9、Swagger UI |
-| 前端 | Vue 3、Vite 6、Vue Router、Element Plus、Axios、lucide |
+| 前端 | Vue 3、Vite 6、Vue Router、Element Plus 按需注册、Axios、lucide |
 | 部署 | Docker Compose、Nginx、Maven 多阶段构建 |
 
 ## 系统架构与数据模型
@@ -34,7 +36,7 @@ CampusAI Market 是一个面向校园二手交易场景的 Spring Boot + Spring 
 - [系统架构图](docs/architecture.md)
 - [ER 图](docs/er-diagram.md)
 
-架构覆盖 Vue/Nginx、Spring Boot、MySQL、Redis、DeepSeek 以及本地 Embedding/RAG。ER 图覆盖 `user`、`category`、`item`、`favorite`、`orders` 五张核心表。
+架构覆盖 Vue/Nginx、Spring Boot、MySQL、Redis、DeepSeek 以及本地 Embedding/RAG。ER 图覆盖 `user`、`category`、`item`、`favorite`、`orders`、`ai_conversation`、`ai_message` 七张核心表。
 
 ## 项目结构
 
@@ -66,7 +68,9 @@ docker-compose.yml
 | `category` | 商品分类 | `name` 唯一 |
 | `item` | 二手商品 | 商品状态 `ON_SALE/SOLD/OFF_SHELF` |
 | `favorite` | 用户收藏关系 | `(user_id, item_id)` 唯一 |
-| `orders` | 订单与价格快照 | 订单状态 `CREATED/PAID/COMPLETED/CANCELLED` |
+| `orders` | 订单与价格快照 | 订单状态 `CREATED/CONFIRMED/IN_PROGRESS/COMPLETED/CANCELLED` |
+| `ai_conversation` | AI 会话 | 按 `user_id` 隔离，记录标题和时间 |
+| `ai_message` | AI 消息 | `USER/ASSISTANT`，通过会话外键级联删除 |
 
 完整字段和关系见 [ER 图](docs/er-diagram.md)。
 
@@ -76,10 +80,11 @@ docker-compose.yml
 | --- | --- |
 | 认证 | `POST /api/auth/register`、`POST /api/auth/login`、`GET /api/auth/me`、`POST /api/auth/logout` |
 | 分类 | `GET /api/categories` |
-| 商品 | `POST /api/items`、`GET /api/items`、`GET /api/items/hot`、`GET /api/items/{id}`、`PUT /api/items/{id}`、`DELETE /api/items/{id}`、`GET /api/items/mine` |
+| 商品 | `POST /api/items`、`GET /api/items`、`GET /api/items/hot`、`GET /api/items/{id}`、`GET /api/items/{id}/manage`、`PUT /api/items/{id}`、`DELETE /api/items/{id}`、`PATCH /api/items/{id}/relist`、`GET /api/items/mine` |
+| 文件 | `POST /api/files/images`、`GET /api/files/images/{filename}` |
 | 收藏 | `POST /api/favorites`、`DELETE /api/favorites/{itemId}`、`GET /api/favorites`、`GET /api/favorites/check/{itemId}` |
 | 订单 | `POST /api/orders`、`GET /api/orders/my`、`PATCH /api/orders/{id}/status` |
-| AI | `POST /api/agent/chat` |
+| AI | `POST /api/agent/chat`、`GET/POST /api/agent/conversations`、`GET/POST /api/agent/conversations/{id}/messages`、`DELETE /api/agent/conversations/{id}` |
 
 后端启动后访问以下地址查看完整参数、响应结构和 JWT 调试入口：
 
@@ -87,6 +92,36 @@ docker-compose.yml
 - OpenAPI JSON：`http://localhost:8080/v3/api-docs`
 
 在 Swagger UI 点击 `Authorize`，填写登录接口返回的 JWT 即可调用受保护接口。
+
+## AI Agent 工作流程
+
+```mermaid
+flowchart LR
+    User["用户问题"] --> Agent["Spring AI ChatClient<br/>DeepSeek Agent"]
+    Agent --> ToolCalling["Tool Calling"]
+    ToolCalling --> Backend["Java Service"]
+    Backend --> MySQL[("MySQL 商品/订单")]
+    Backend --> Redis[("Redis 搜索缓存")]
+    MySQL --> Backend
+    Redis --> Backend
+    Backend --> Agent
+    Agent --> Answer["自然语言回答"]
+```
+
+会话消息保存在 `ai_conversation` 与 `ai_message`。发送新消息时只加载最近 10 条消息作为上下文，兼顾多轮理解和 token 消耗。
+
+## RAG 工作流程
+
+```mermaid
+flowchart LR
+    Rules["校园交易规则"] --> Split["文本切分"]
+    Split --> Embedding["本地 Embedding<br/>all-MiniLM-L6-v2"]
+    Embedding --> VectorStore["SimpleVectorStore"]
+    Question["规则类问题"] --> Similarity["相似度搜索 Top 3"]
+    VectorStore --> Similarity
+    Similarity --> LLM["DeepSeek"]
+    LLM --> Answer["基于规则的回答"]
+```
 
 ## Docker Compose 运行
 
@@ -101,12 +136,19 @@ Copy-Item -LiteralPath '.env.example' -Destination '.env'
 
 - `DEEPSEEK_API_KEY`：DeepSeek API Key。
 - `JWT_SECRET`：至少 32 个随机字符。
-- `MYSQL_ROOT_PASSWORD`、`MYSQL_USER`、`MYSQL_PASSWORD`：可保留开发默认值。
+- `MYSQL_ROOT_PASSWORD`、`MYSQL_USER`、`MYSQL_PASSWORD`：数据库账号密码，不要再使用示例占位值上线。
 
 4. 构建并启动：
 
 ```powershell
 docker compose -f 'D:\CampusAI Market\docker-compose.yml' up -d --build
+```
+
+首次拿到已有数据卷时，如果需要升级到本次新增表结构，执行一次增量脚本：
+
+```powershell
+Get-Content -Raw -LiteralPath 'sql\migrations\V2__phase14_ai_and_order_status.sql' |
+  docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" campusai_market'
 ```
 
 5. 检查服务：
@@ -129,7 +171,7 @@ Invoke-RestMethod -Uri 'http://localhost:8080/api/categories' -Method Get
 
 - MySQL 8.0，数据库名 `campusai_market`，默认端口 `3306`。
 - Redis 7，默认端口 `6379`。本地容器可用 `docker start campusai-redis` 启动。
-- 创建 `src/main/resources/application.yml`，配置 MySQL、Redis、DeepSeek 和 JWT。该文件包含真实密钥并且已被 Git 忽略。
+- `src/main/resources/application.yml` 已改为读取环境变量，并会自动读取项目根目录的 `.env`。本地运行使用 `LOCAL_MYSQL_USERNAME` / `LOCAL_MYSQL_PASSWORD`，Docker Compose 使用独立的 `MYSQL_USER` / `MYSQL_PASSWORD`，两组配置互不混用。
 
 ### 后端
 
@@ -178,7 +220,7 @@ npm run dev
 
 ## Embedding 模型
 
-后端默认从 `hf-mirror.com` 下载 `all-MiniLM-L6-v2` ONNX 模型并缓存。如果容器网络无法访问镜像站，可把模型放入项目根目录的 `.model-cache/`：
+RAG 采用首次规则类提问时懒加载：Embedding 模型或向量库初始化失败时只跳过规则检索，不会阻断后端启动。默认从 `hf-mirror.com` 下载 `all-MiniLM-L6-v2` ONNX 模型并缓存。如果容器网络无法访问镜像站，可把模型放入项目根目录的 `.model-cache/`：
 
 ```text
 .model-cache/
@@ -193,18 +235,30 @@ EMBEDDING_MODEL_URI=file:/models/model.onnx
 EMBEDDING_TOKENIZER_URI=file:/models/tokenizer.json
 ```
 
-`docker-compose.yml` 会把 `.model-cache` 只读挂载到容器 `/models`。
+`docker-compose.yml` 会把 `.model-cache` 挂载到容器 `/models`。目录保持可写，
+既支持使用本地模型文件，也允许容器首次运行时把远程模型缓存到该目录。
+
+当前中文语义检索仍使用 `all-MiniLM-L6-v2`，因为项目已经能够稳定本地启动，暂时不为替换模型引入额外部署复杂度。后续可评估 BGE 系列 ONNX 中文模型，只需替换 `EMBEDDING_MODEL_URI` 与 tokenizer 配置并做检索评测。
+
+## 图片存储
+
+- 上传接口：`POST /api/files/images`，需要 JWT。
+- 支持格式：JPG、PNG、WebP、GIF。
+- 单张大小：不超过 5MB。
+- 文件会校验文件头，不信任客户端扩展名或 MIME。
+- 文件名由服务端 UUID 生成，避免路径穿越与重名覆盖。
+- 本地目录默认为 `./uploads`，Compose 使用 `uploads_data` 卷挂载到 `/app/uploads`。
 
 ## 安全与配置
 
-- `src/main/resources/application.yml`、`.env`、`.model-cache/`、`frontend/node_modules/`、`frontend/dist/` 均不会提交到 Git。
+- `src/main/resources/application.yml`、`.env`、`.model-cache/`、`frontend/node_modules/`、`frontend/dist/` 均不会提交到 Git；`application.yml` 中也不保存真实密钥。
 - Docker Compose 使用环境变量注入密钥，不使用仓库内明文密钥。
 - JWT 通过 `Authorization: Bearer <token>` 传递；登出后的 token 写入 Redis 黑名单。
 - Swagger 页面公开，但业务接口仍按原 JWT 规则鉴权。
 
 ## 当前范围
 
-- 商品图片支持 URL 输入，暂未实现文件上传。
-- AI 会话仅保存在前端内存，暂未持久化 conversation/message。
-- `SimpleVectorStore` 为内存向量库，重启后会重新构建。
-- `all-MiniLM-L6-v2` 不是中文专用模型，中文规则检索为可用级别。
+- `SimpleVectorStore` 仍为内存向量库，后端重启后会重新加载规则文档并生成向量。
+- `all-MiniLM-L6-v2` 不是中文专用模型；当前以稳定运行为先，后续可替换为中文 Embedding。
+- 图片存储使用单机本地卷，适合校园项目和 Docker Compose；多实例部署时应替换为对象存储。
+- 订单未接入真实支付渠道，`PAID` 仅作为历史兼容状态保留，当前主流程不产生该状态。

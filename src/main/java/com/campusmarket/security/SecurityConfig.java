@@ -38,10 +38,13 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/files/images/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/items/mine").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/items/*/manage").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/items", "/api/items/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(this::writeUnauthorized))

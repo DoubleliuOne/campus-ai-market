@@ -56,7 +56,7 @@ public class OrderService {
             throw new BusinessException("商品id不能为空");
         }
 
-        Item item = itemMapper.selectById(itemId);
+        Item item = itemMapper.selectByIdForUpdate(itemId);
         if (item == null) {
             throw new BusinessException("商品不存在");
         }
@@ -79,7 +79,7 @@ public class OrderService {
         order.setPrice(item.getPrice());
         order.setStatus("CREATED");
         orderMapper.insert(order);
-        itemService.evictHotCache();
+        itemService.evictItemCachesAfterCommit();
 
         return order.getId();
     }
@@ -102,35 +102,24 @@ public class OrderService {
         }
 
         String targetStatus = request == null ? null : request.getStatus();
-        if (!"CREATED".equals(order.getStatus())) {
-            throw new BusinessException("当前订单状态不能修改");
+        OrderStatusPolicy.validateTransition(
+                order.getStatus(), targetStatus, isBuyer, isSeller);
+
+        int updated = orderMapper.update(null, Wrappers.<Order>lambdaUpdate()
+                .eq(Order::getId, order.getId())
+                .eq(Order::getStatus, order.getStatus())
+                .set(Order::getStatus, targetStatus));
+        if (updated != 1) {
+            throw new BusinessException("订单状态已发生变化，请刷新后重试");
         }
 
         if ("CANCELLED".equals(targetStatus)) {
-            if (!isBuyer) {
-                throw new BusinessException("只有买家可以取消订单");
-            }
-            order.setStatus("CANCELLED");
-            orderMapper.updateById(order);
-
             itemMapper.update(null, Wrappers.<Item>lambdaUpdate()
                     .eq(Item::getId, order.getItemId())
                     .eq(Item::getStatus, "SOLD")
                     .set(Item::getStatus, "ON_SALE"));
-            itemService.evictHotCache();
-            return;
+            itemService.evictItemCachesAfterCommit();
         }
-
-        if ("COMPLETED".equals(targetStatus)) {
-            if (!isSeller) {
-                throw new BusinessException("只有卖家可以确认完成订单");
-            }
-            order.setStatus("COMPLETED");
-            orderMapper.updateById(order);
-            return;
-        }
-
-        throw new BusinessException("不支持的订单状态");
     }
 
     public PageResult<OrderVO> myOrders(LoginUser loginUser, String role, long page, long size) {

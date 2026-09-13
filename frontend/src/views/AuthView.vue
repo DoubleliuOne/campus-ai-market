@@ -1,8 +1,15 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { KeyRound, ShoppingBag, UserRound } from 'lucide-vue-next'
+import ElMessage from 'element-plus/es/components/message/index.mjs'
+import {
+  Bot,
+  KeyRound,
+  PackageSearch,
+  ShieldCheck,
+  ShoppingBag,
+  UserRound,
+} from 'lucide-vue-next'
 
 import { authState, isLoggedIn, login, register } from '../stores/auth'
 
@@ -11,6 +18,7 @@ const router = useRouter()
 
 const mode = ref(route.query.mode === 'register' ? 'register' : 'login')
 const submitting = ref(false)
+const formError = ref('')
 const form = reactive({
   username: '',
   password: '',
@@ -26,6 +34,13 @@ watch(
 
 const title = computed(() => (mode.value === 'login' ? '登录校园集市' : '注册新账号'))
 
+watch(
+  () => [mode.value, form.username, form.password, form.campus],
+  () => {
+    formError.value = ''
+  },
+)
+
 function redirectAfterAuth() {
   const raw = typeof route.query.redirect === 'string' ? route.query.redirect : ''
   router.replace(raw.startsWith('/') && !raw.startsWith('//') ? raw : { name: 'home' })
@@ -33,14 +48,15 @@ function redirectAfterAuth() {
 
 async function submit() {
   if (!form.username.trim() || !form.password) {
-    ElMessage.warning('请输入用户名和密码')
+    formError.value = '请输入用户名和密码'
     return
   }
   if (mode.value === 'register' && form.password.length < 6) {
-    ElMessage.warning('密码至少需要 6 位')
+    formError.value = '密码至少需要 6 位'
     return
   }
 
+  formError.value = ''
   submitting.value = true
   try {
     if (mode.value === 'login') {
@@ -63,7 +79,8 @@ async function submit() {
       router.replace({ query: {} })
     }
   } catch (error) {
-    ElMessage.error(error.message || '操作失败，请稍后重试')
+    formError.value = error.message || '操作失败，请稍后重试'
+    ElMessage.error(formError.value)
   } finally {
     submitting.value = false
   }
@@ -77,18 +94,53 @@ if (isLoggedIn()) {
 <template>
   <div class="auth-page">
     <div class="auth-wrap">
-      <RouterLink to="/" class="auth-brand">
-        <span class="auth-logo"><ShoppingBag :size="22" /></span>
-        <span>
-          <strong>CampusAI Market</strong>
-          <small>校园二手集市</small>
-        </span>
-      </RouterLink>
+      <section class="auth-visual">
+        <RouterLink to="/" class="auth-brand">
+          <span class="auth-logo"><ShoppingBag :size="22" /></span>
+          <span>
+            <strong>CampusAI Market</strong>
+            <small>校园二手集市</small>
+          </span>
+        </RouterLink>
+
+        <div class="visual-copy">
+          <span class="visual-kicker">AI 驱动的校园交易</span>
+          <h1>不只搜索商品，<br />更能理解你的需求。</h1>
+          <p>基于平台真实商品、规则知识和订单数据，完成更可靠的校园闲置交易。</p>
+        </div>
+
+        <div class="visual-features">
+          <div class="feature-item">
+            <span><Bot :size="17" /></span>
+            <div>
+              <strong>AI 商品助手</strong>
+              <small>按预算和用途查找真实在售商品</small>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span><PackageSearch :size="17" /></span>
+            <div>
+              <strong>校园闲置流转</strong>
+              <small>发布、收藏、下单与交易状态一站管理</small>
+            </div>
+          </div>
+          <div class="feature-item">
+            <span><ShieldCheck :size="17" /></span>
+            <div>
+              <strong>真实业务数据</strong>
+              <small>AI 回答来自 MySQL 与平台规则知识库</small>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section class="auth-card" aria-label="账号表单">
         <div class="auth-head">
-          <h1>{{ title }}</h1>
-          <p>{{ mode === 'login' ? '使用账号进入校园集市' : '创建你的校园闲置交易账号' }}</p>
+          <div>
+            <span class="auth-eyebrow">{{ mode === 'login' ? '欢迎回来' : '加入集市' }}</span>
+            <h2>{{ title }}</h2>
+            <p>{{ mode === 'login' ? '使用账号继续你的校园交易' : '创建账号，开始发布与发现闲置' }}</p>
+          </div>
         </div>
 
         <div class="mode-switch" role="tablist">
@@ -133,7 +185,7 @@ if (isLoggedIn()) {
             type="password"
             show-password
             :placeholder="mode === 'login' ? '输入密码' : '至少 6 位密码'"
-            autocomplete="current-password"
+            :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
             @keyup.enter="submit"
           >
             <template #prefix><KeyRound :size="16" /></template>
@@ -149,6 +201,8 @@ if (isLoggedIn()) {
               @keyup.enter="submit"
             />
           </template>
+
+          <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
 
           <el-button
             type="primary"
@@ -172,21 +226,36 @@ if (isLoggedIn()) {
   place-items: center;
   padding: 30px 16px;
   background:
-    linear-gradient(160deg, rgba(20, 122, 92, 0.08), rgba(247, 248, 246, 0) 42%),
+    linear-gradient(145deg, rgba(20, 122, 92, 0.07), rgba(244, 246, 245, 0) 46%),
     var(--campus-bg);
 }
 
 .auth-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
   width: 100%;
-  max-width: 420px;
+  max-width: 980px;
+  overflow: hidden;
+  background: var(--campus-surface);
+  border: 1px solid var(--campus-line);
+  border-radius: var(--campus-radius-md);
+  box-shadow: 0 24px 70px rgba(24, 50, 40, 0.12);
+}
+
+.auth-visual {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 620px;
+  padding: 38px;
+  color: #eef8f3;
+  background: #155b49;
 }
 
 .auth-brand {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
-  margin-bottom: 22px;
 }
 
 .auth-logo {
@@ -195,8 +264,9 @@ if (isLoggedIn()) {
   width: 40px;
   height: 40px;
   color: #fff;
-  background: var(--campus-green);
-  border-radius: 8px;
+  color: #155b49;
+  background: #fff;
+  border-radius: var(--campus-radius-md);
 }
 
 .auth-brand strong,
@@ -205,32 +275,111 @@ if (isLoggedIn()) {
 }
 
 .auth-brand strong {
+  color: #fff;
   font-size: 17px;
   letter-spacing: 0;
 }
 
 .auth-brand small {
   margin-top: 3px;
-  color: var(--campus-text);
+  color: rgba(238, 248, 243, 0.7);
   font-size: 12px;
   letter-spacing: 0.12em;
-  text-align: center;
+}
+
+.visual-copy {
+  max-width: 430px;
+  margin: auto 0;
+  padding: 34px 0;
+}
+
+.visual-kicker {
+  display: inline-block;
+  color: #a8d9c8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.visual-copy h1 {
+  margin: 14px 0 0;
+  color: #fff;
+  font-size: clamp(28px, 3.2vw, 40px);
+  font-weight: 780;
+  line-height: 1.32;
+  letter-spacing: 0;
+}
+
+.visual-copy p {
+  margin: 16px 0 0;
+  color: rgba(238, 248, 243, 0.76);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.visual-features {
+  display: grid;
+  gap: 10px;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--campus-radius-sm);
+}
+
+.feature-item > span {
+  display: grid;
+  flex: 0 0 34px;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: #b7e2d4;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--campus-radius-sm);
+}
+
+.feature-item strong,
+.feature-item small {
+  display: block;
+}
+
+.feature-item strong {
+  color: #fff;
+  font-size: 13px;
+}
+
+.feature-item small {
+  margin-top: 3px;
+  color: rgba(238, 248, 243, 0.63);
+  font-size: 11px;
 }
 
 .auth-card {
-  padding: 26px 24px 24px;
-  background: var(--campus-surface);
-  border: 1px solid var(--campus-line);
-  border-radius: 8px;
-  box-shadow: 0 14px 40px rgba(36, 58, 48, 0.07);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 42px 36px;
 }
 
 .auth-head {
-  text-align: center;
+  text-align: left;
 }
 
-.auth-head h1 {
+.auth-eyebrow {
+  color: var(--campus-green);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.auth-head h2 {
   margin: 0;
+  margin-top: 7px;
   font-size: 22px;
   font-weight: 750;
   letter-spacing: 0;
@@ -249,7 +398,7 @@ if (isLoggedIn()) {
   margin: 20px 0;
   padding: 4px;
   background: #eef1ef;
-  border-radius: 8px;
+  border-radius: var(--campus-radius-md);
 }
 
 .mode-switch button {
@@ -257,7 +406,7 @@ if (isLoggedIn()) {
   color: #58645e;
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--campus-radius-sm);
   font-size: 14px;
   font-weight: 650;
   cursor: pointer;
@@ -287,9 +436,64 @@ if (isLoggedIn()) {
   margin-top: 20px;
 }
 
+.form-error {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  color: #a43c31;
+  background: #fff0ed;
+  border: 1px solid #f2c8c1;
+  border-radius: var(--campus-radius-sm);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 820px) {
+  .auth-wrap {
+    grid-template-columns: 1fr;
+    max-width: 460px;
+  }
+
+  .auth-visual {
+    min-height: auto;
+    padding: 24px;
+  }
+
+  .visual-copy {
+    padding: 30px 0 8px;
+  }
+
+  .visual-copy h1 {
+    font-size: 27px;
+  }
+
+  .visual-features {
+    display: none;
+  }
+}
+
 @media (max-width: 480px) {
-  .auth-card {
+  .auth-page {
+    padding: 0;
+    background: var(--campus-surface);
+  }
+
+  .auth-wrap {
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .auth-visual {
     padding: 22px 18px;
+  }
+
+  .visual-copy {
+    display: none;
+  }
+
+  .auth-card {
+    padding: 26px 18px 36px;
   }
 }
 </style>

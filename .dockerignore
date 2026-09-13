@@ -11,3 +11,4 @@ CONTEXT.md
 .env.*
 docker-compose.yml
 *.log
+uploads

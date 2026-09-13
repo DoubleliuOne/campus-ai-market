@@ -1,13 +1,14 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import ElMessage from 'element-plus/es/components/message/index.mjs'
+import ElMessageBox from 'element-plus/es/components/message-box/index.mjs'
 import {
   ArrowLeft,
   Bot,
   Check,
   Heart,
-  PackagePlus,
+  RotateCcw,
   Store,
 } from 'lucide-vue-next'
 
@@ -16,6 +17,8 @@ import {
   checkFavoriteApi,
   createOrderApi,
   getItemDetailApi,
+  getManagedItemDetailApi,
+  relistItemApi,
   removeFavoriteApi,
 } from '../api'
 import ItemMedia from '../components/ItemMedia.vue'
@@ -46,7 +49,10 @@ async function loadDetail() {
   item.value = null
   favorite.value = false
   try {
-    const data = await getItemDetailApi(itemId.value)
+    const data =
+      route.query.manage === '1' && isLoggedIn()
+        ? await getManagedItemDetailApi(itemId.value)
+        : await getItemDetailApi(itemId.value)
     item.value = data
     activeImage.value = firstImage(data)
     if (isLoggedIn() && authState.user?.id !== data.sellerId) {
@@ -56,6 +62,24 @@ async function loadDetail() {
     loadError.value = error.message || '商品加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function relistItem() {
+  if (!item.value) {
+    return
+  }
+  acting.value = true
+  try {
+    await relistItemApi(item.value.id)
+    ElMessage.success('商品已重新上架')
+    await loadDetail()
+  } catch (error) {
+    if (error.status !== 401) {
+      ElMessage.error(error.message)
+    }
+  } finally {
+    acting.value = false
   }
 }
 
@@ -128,7 +152,7 @@ function backToMarket() {
   router.back()
 }
 
-watch(itemId, () => {
+watch([itemId, () => route.query.manage], () => {
   if (itemId.value) {
     loadDetail()
   }
@@ -209,6 +233,15 @@ onMounted(loadDetail)
               @click="router.push({ name: 'my-items' })"
             >
               这是你发布的商品
+            </el-button>
+            <el-button
+              v-if="item.status === 'OFF_SHELF'"
+              type="primary"
+              :icon="RotateCcw"
+              :loading="acting"
+              @click="relistItem"
+            >
+              重新上架
             </el-button>
           </template>
           <template v-else-if="item.status === 'ON_SALE'">

@@ -8,9 +8,11 @@ import jakarta.validation.constraints.Pattern;
 public class UpdateOrderStatusRequest {
 
     @NotBlank(message = "订单状态不能为空")
-    @Pattern(regexp = "CANCELLED|COMPLETED", message = "订单状态只能是CANCELLED或COMPLETED")
-    @Schema(description = "目标状态", allowableValues = {"CANCELLED", "COMPLETED"},
-            example = "COMPLETED", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Pattern(regexp = "CONFIRMED|IN_PROGRESS|COMPLETED|CANCELLED",
+            message = "订单状态只能是CONFIRMED、IN_PROGRESS、COMPLETED或CANCELLED")
+    @Schema(description = "目标状态",
+            allowableValues = {"CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"},
+            example = "CONFIRMED", requiredMode = Schema.RequiredMode.REQUIRED)
     private String status;
 
     public String getStatus() {

@@ -6,13 +6,14 @@ import {
   Home,
   LogOut,
   PackagePlus,
+  Search,
   ShoppingBag,
   Store,
   Ticket,
   UserRound,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import ElMessage from 'element-plus/es/components/message/index.mjs'
 
 import { authState, isLoggedIn, logout } from '../stores/auth'
 
@@ -45,6 +46,10 @@ function go(path) {
           <RouterLink to="/" class="nav-link" exact-active-class="is-active">
             <Home :size="17" />
             <span>首页</span>
+          </RouterLink>
+          <RouterLink to="/?focus=search" class="nav-link">
+            <Search :size="17" />
+            <span>逛集市</span>
           </RouterLink>
           <RouterLink to="/assistant" class="nav-link" active-class="is-active">
             <Bot :size="17" />
@@ -125,8 +130,8 @@ function go(path) {
   align-items: center;
   gap: 20px;
   width: 100%;
-  max-width: 1180px;
-  height: 62px;
+  max-width: var(--campus-page-width);
+  height: 66px;
   margin: 0 auto;
   padding: 0 20px;
 }
@@ -145,7 +150,8 @@ function go(path) {
   height: 34px;
   color: #fff;
   background: var(--campus-green);
-  border-radius: 8px;
+  border-radius: var(--campus-radius-md);
+  box-shadow: 0 5px 14px rgba(20, 122, 92, 0.2);
 }
 
 .brand-copy {
@@ -181,7 +187,7 @@ function go(path) {
   height: 38px;
   padding: 0 11px;
   color: #4e5a55;
-  border-radius: 6px;
+  border-radius: var(--campus-radius-sm);
   font-size: 14px;
   font-weight: 600;
 }
@@ -231,7 +237,7 @@ function go(path) {
   height: 28px;
   color: #fff;
   background: #2d7a8f;
-  border-radius: 6px;
+  border-radius: var(--campus-radius-sm);
 }
 
 .user-name {
@@ -252,7 +258,7 @@ function go(path) {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 52px;
+  min-height: 58px;
   color: #7a857f;
   border-top: 1px solid var(--campus-line);
   font-size: 12px;
@@ -286,14 +292,27 @@ function go(path) {
     flex: 0 1 auto;
     order: 3;
     width: 100%;
+    overflow-x: auto;
   }
 
   .nav-link {
     height: 34px;
-    flex: 1;
+    flex: 0 0 auto;
     justify-content: center;
     padding: 0 8px;
     font-size: 13px;
+  }
+
+  .nav-link:first-child {
+    flex: 1;
+  }
+
+  .nav-link:nth-child(2) {
+    flex: 1;
+  }
+
+  .nav-link:nth-child(3) {
+    flex: 1;
   }
 
   .user-area {

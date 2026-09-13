@@ -2,30 +2,33 @@
 
 > 新 Codex 会话请先阅读本文件与 `CONTEXT.md`，再开始修改。
 > 创建时间：2026-09-06
-> 最后更新：2026-09-11（Phase 13 已实现并验证，GitHub 远程推送待用户授权）
+> 最后更新：2026-09-11（Phase 14 最终优化已实现，GitHub 远程推送待用户授权）
 
 ## 1. 项目一句话现状
 
-CampusAI Market 是一个面向校园二手交易与 Java 后端面试展示的项目。当前已完成后端业务、AI Tool Calling、RAG、Vue 3 前端、Docker Compose 完整栈和 Phase 13 工程化优化；仅剩 GitHub 远程仓库创建与推送。
+CampusAI Market 是一个面向校园二手交易与 Java 后端面试展示的项目。当前已完成后端业务、图片上传、AI Tool Calling、服务端多轮会话、RAG、Vue 3 前端、Docker Compose 完整栈和前后端生产构建优化；仅剩 GitHub 远程仓库创建与推送。
 
 ## 2. 当前完成范围
 
 ### 后端（已完成）
 
 - 用户：注册、登录、JWT、`/me`、登出 Redis 黑名单。
-- 商品：发布、搜索、热门缓存、详情、修改、下架、卖家商品列表。
+- 商品：发布、搜索、排序、热门/搜索缓存、详情、修改、下架、重新上架、卖家全状态商品管理。
+- 图片：本地上传、格式/大小/文件头校验、公开访问、Docker 数据卷持久化，兼容 URL 图片。
 - 收藏：添加、取消、我的收藏、是否已收藏检查。
-- 订单：创建订单防并发超卖、买家/卖家订单查询、取消/完成。
-- AI Agent：DeepSeek Tool Calling，工具包括 `searchItems`、`getItemDetail`、`getMyOrders`、`recommendItems`。
+- 订单：创建订单防并发超卖、买家/卖家订单查询，以及 `CREATED -> CONFIRMED -> IN_PROGRESS -> COMPLETED` 状态机。
+- AI Agent：DeepSeek Tool Calling，工具包括 `searchItems`、`getItemDetail`、`getMyOrders`、`recommendItems`；支持服务端会话、多轮记忆和用户隔离。
 - RAG：本地 `all-MiniLM-L6-v2` + `SimpleVectorStore`，回答平台交易规则。
 - 为前端补充的公开接口：`GET /api/categories`、`GET /api/favorites/check/{itemId}`。
 
-### 前端（Phase 11 已完成）
+### 前端（Phase 11 + Phase 14 已完成）
 
 - Vue 3 + Vite 6 + Vue Router + Element Plus + Axios + lucide。
-- 页面：登录/注册、首页搜索、商品详情、发布/编辑、我的商品、我的收藏、我的订单、AI 助手、404。
+- 页面：登录/注册、首页搜索、商品详情、发布/编辑、我的商品、我的收藏、我的订单、三栏 AI 助手、404。
 - AI 回答使用 `marked + DOMPurify` 渲染 Markdown。
-- 商品图片为 URL 输入，无文件上传接口。
+- 商品图片支持本地上传，也保留 URL 添加能力；加载失败自动回退分类占位图。
+- AI 助手支持会话列表、历史消息恢复、删除会话、当前商品上下文和多轮对话。
+- 路由懒加载，Element Plus 按需注册，Vue/Element/图标/Markdown/HTTP 已独立分包。
 
 ### Docker Compose（Phase 12 已提交配置）
 
@@ -44,6 +47,18 @@ CampusAI Market 是一个面向校园二手交易与 Java 后端面试展示的�
 - 日志切面：Controller/Service 记录类名、方法名、参数摘要、耗时和异常；密码、JWT、API Key 与完整消息正文不落日志。
 - Swagger/OpenAPI：接入 SpringDoc 2.8.9，公开 Swagger UI 和 OpenAPI JSON，配置 Bearer JWT 认证入口。
 - 文档：README 已扩展，新增 `docs/er-diagram.md` 和 `docs/architecture.md` Mermaid 图。
+
+### 最终优化（Phase 14 已完成）
+
+- 图片上传：新增 `POST /api/files/images`、公开读取、文件头校验、UUID 文件名和 Compose 持久化卷。
+- 商品状态：新增 `PATCH /api/items/{id}/relist`，卖家可重新上架 `OFF_SHELF` 商品，不能上架已售商品。
+- 卖家详情：新增 `GET /api/items/{id}/manage`，公开详情仍只返回在售商品。
+- AI 持久化：新增 `ai_conversation`、`ai_message`，提供会话列表、创建、消息查询、发送和删除接口。
+- 多轮记忆：每次只加载最近 10 条消息，防止上下文无限增长。
+- Redis 搜索缓存：使用版本号缓存键和 90 秒 TTL，商品写操作和订单取消时提升版本号使旧缓存失效。
+- 订单状态机：`CREATED -> CONFIRMED -> IN_PROGRESS -> COMPLETED`，中途允许买卖双方取消，完成/取消为终态。
+- 后端安全：JWT 黑名单键改为 token SHA-256 摘要；卖家管理详情认证规则已提前，避免被公开商品规则覆盖。
+- 前端生产构建：主包由约 1.24MB 拆分到按路由加载，Element Plus 从全量安装改为按需注册。
 
 ## 3. 已验证结果
 
@@ -64,6 +79,9 @@ CampusAI Market 是一个面向校园二手交易与 Java 后端面试展示的�
 - Phase 13：本地真实启动后，`/swagger-ui/index.html` 返回 200，`/v3/api-docs` 返回 OpenAPI 3.1.0 且包含 Bearer scheme。
 - Phase 13：空用户名、短密码、非法 JSON、负价格均返回统一 `code=400` 和中文错误。
 - Phase 13：日志实测不记录密码或 JWT 原文，仅记录 DTO 类型和字符串长度。
+- Phase 14：`mvn clean test` 共 15 个测试全部通过，覆盖校验、上传安全、订单状态机、RAG 降级和 Tool 调用预算。
+- Phase 14：`npm run build` 通过，主入口约 11.5KB，最大异步页面约 8.8KB，无单块超过 500KB 警告。
+- Phase 14：Docker Compose 四服务重建成功，前端 8081 返回 200，增量迁移已应用到 Compose MySQL。
 
 ## 4. Git 状态
 
@@ -134,19 +152,21 @@ Phase 13 验收标准：
 - [x] README 与新会话可独立完成本地运行和 Docker 部署。
 - [ ] Git 工作区干净、远程仓库可访问（远程推送按用户要求暂缓）。
 
-### 5.3 前端收尾项（可选）
+### 5.3 已完成的前端与 AI 增强
 
-- 真实图片上传接口与静态资源存储。
-- 已下架商品重新上架接口与按钮。
-- 卖家查看自己已售/已下架商品的详情视图。
-- 生产构建分包，消除单 chunk 超 500KB 警告。
+- [x] 真实图片上传接口、文件校验与 Docker 持久化。
+- [x] 已下架商品重新上架接口与按钮。
+- [x] 卖家查看自己已售/已下架商品的详情视图。
+- [x] Vite 路由懒加载与依赖分包，消除大 chunk 警告。
+- [x] `ai_conversation` / `ai_message` 表与服务端多轮记忆。
+- [x] Agent 搜索结果 Redis 版本化缓存与写操作失效。
+- [x] `CREATED / CONFIRMED / IN_PROGRESS / COMPLETED / CANCELLED` 订单状态流转。
 
-### 5.4 AI 可选增强
+### 5.4 后续可选增强
 
-- `conversation` / `message` 表与服务端多轮记忆。
-- 中文 Embedding 模型替换 `all-MiniLM-L6-v2`。
-- Agent 搜索结果 Redis 缓存。
-- 更完整订单状态流转。
+- 中文 Embedding 模型：当前 `all-MiniLM-L6-v2` 可稳定运行；若替换，应先建立中文检索评测集，再评估 BGE 等 ONNX 模型。
+- 对象存储：当前本地卷适合单实例展示；多实例部署时替换为 OSS/S3。
+- Agent 工具调用轨迹：当前前端只展示能力，不展示内部 Tool 调用详情；如果需要面试演示，可增加脱敏的调用摘要。
 
 ## 6. 本地运行方式
 
@@ -154,7 +174,7 @@ Phase 13 验收标准：
 
 - MySQL 本机服务：`MySQL80`，端口 3306。
 - Redis：`docker start campusai-redis`（需要 Docker Desktop）。
-- 本地配置：`src/main/resources/application.yml`，含本机 MySQL 密码、DeepSeek Key、JWT Secret。
+- 本地配置：`src/main/resources/application.yml` 读取 `.env` 中的 `LOCAL_MYSQL_USERNAME` / `LOCAL_MYSQL_PASSWORD`、DeepSeek Key 和 JWT Secret。
 - 后端启动：
 
 ```powershell
@@ -180,25 +200,25 @@ npm run dev
 ## 7. 已知问题与注意事项
 
 - Docker 访问 Docker Hub 不稳定时，可先单独 `docker pull` 基础镜像再执行 Compose 构建。
-- Compose 首次启动会访问 `hf-mirror.com` 下载 Embedding 模型。
-- 若容器下载 hf-mirror 文件得到 0 字节导致后端重启，按 README 在 `.model-cache/` 放入 `model.onnx` 与 `tokenizer.json`，并在 `.env` 中设置 `EMBEDDING_MODEL_URI=file:/models/model.onnx`、`EMBEDDING_TOKENIZER_URI=file:/models/tokenizer.json`。
+- RAG 在首次规则类提问时加载模型；下载失败只会跳过规则增强，不影响后端启动。
+- 若容器使用本地模型，按 README 在 `.model-cache/` 放入 `model.onnx` 与 `tokenizer.json`，并在 `.env` 中设置 `EMBEDDING_MODEL_URI=file:/models/model.onnx`、`EMBEDDING_TOKENIZER_URI=file:/models/tokenizer.json`。
 - Compose 的 MySQL 数据来自 `sql/init.sql`，本机 MySQL80 里的测试数据不会自动带入；删除 Compose 卷前请确认不需要其中数据。
-- `application.yml` 含真实密钥，任何提交前都要确认被 `.dockerignore` / `.gitignore` 排除。
+- `application.yml` 只保存环境变量占位，真实密钥放在 Git 忽略的 `.env` 中。
 - 目录名含空格，所有 PowerShell、Maven、Git、Docker 路径都要加引号。
-- `README.md`、Swagger、参数校验 starter、统一异常和日志切面均已完成；只差 GitHub 远程推送。
-- AI 对话目前是前端内存会话，服务端无历史持久化。
-- 商品图片没有文件上传能力，只有 URL 输入。
+- `README.md`、Swagger、参数校验 starter、统一异常和日志切面均已完成。
+- AI 对话已使用服务端会话与消息表持久化，旧 `/api/agent/chat` 仅保留兼容。
+- 商品图片支持本地上传和 URL，Compose 使用 `uploads_data` 卷持久化。
 
 ## 8. 新会话建议开场提示词
 
 ```text
 请先阅读项目根目录 D:\CampusAI Market\NEXT_STEPS.md 与 CONTEXT.md，
 先不要修改代码，用中文说明你对当前项目状态和剩余工作的理解。
-当前最新提交以 `git log -1` 为准，Phase 13 本地实现与验证已完成。
-除 GitHub 远程创建与推送外，参数校验、统一异常、日志切面、Swagger、README、ER/架构图均已完成。
+当前最新提交以 `git log -1` 为准，Phase 14 本地实现与验证已完成但尚未提交。
+除 GitHub 远程创建与推送外，图片、AI 会话、订单状态机、参数校验、Swagger、README 和图表均已完成。
 项目目录含空格，命令中请始终使用引号。
 ```
 
 ## 9. 建议下一步
 
-Phase 13 本地实现与验证完成。后续如需发布，只需创建 GitHub 远程仓库、配置 `origin` 并推送 `main`。
+Phase 14 本地实现与验证完成。后续如需发布，只需创建 GitHub 远程仓库、配置 `origin` 并推送 `main`。

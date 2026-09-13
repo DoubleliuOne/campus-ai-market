@@ -9,6 +9,7 @@ import com.campusmarket.mapper.UserMapper;
 import com.campusmarket.security.JwtUtil;
 import com.campusmarket.vo.LoginResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -36,8 +37,14 @@ public class UserService {
         if (username == null) {
             throw new BusinessException("用户名不能为空");
         }
+        if (username.length() < 3 || username.length() > 50) {
+            throw new BusinessException("用户名长度必须在3到50个字符之间");
+        }
         if (password == null || password.isBlank()) {
             throw new BusinessException("密码不能为空");
+        }
+        if (password.length() < 6 || password.length() > 72) {
+            throw new BusinessException("密码长度必须在6到72个字符之间");
         }
 
         Long count = userMapper.selectCount(
@@ -51,7 +58,11 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setCampus(trimToNull(request.getCampus()));
 
-        userMapper.insert(user);
+        try {
+            userMapper.insert(user);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("用户名已存在");
+        }
         return user.getId();
     }
 

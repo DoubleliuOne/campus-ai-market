@@ -5,10 +5,10 @@ services:
     image: mysql:8.0
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-campusai_root_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
       MYSQL_DATABASE: campusai_market
       MYSQL_USER: ${MYSQL_USER:-campusai}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-campusai_app_dev_password}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4
@@ -41,20 +41,29 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       MYSQL_URL: jdbc:mysql://mysql:3306/campusai_market?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       MYSQL_USERNAME: ${MYSQL_USER:-campusai}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-campusai_app_dev_password}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
       REDIS_HOST: redis
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      JWT_SECRET: ${JWT_SECRET:-campusai-docker-dev-secret-change-me-in-production}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Set DEEPSEEK_API_KEY in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       EMBEDDING_MODEL_URI: ${EMBEDDING_MODEL_URI:-https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx}
       EMBEDDING_TOKENIZER_URI: ${EMBEDDING_TOKENIZER_URI:-https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json}
+      UPLOAD_DIR: /app/uploads
+      EMBEDDING_CACHE_DIR: /models
       TZ: Asia/Shanghai
     volumes:
-      - ./.model-cache:/models:ro
+      - ./.model-cache:/models
+      - uploads_data:/app/uploads
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
     ports:
       - "8080:8080"
 
@@ -64,9 +73,11 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "8081:80"
 
 volumes:
   mysql_data:
+  uploads_data:

@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import ElMessage from 'element-plus/es/components/message/index.mjs'
 import { ExternalLink, HeartOff } from 'lucide-vue-next'
 
 import { getMyFavoritesApi, removeFavoriteApi } from '../api'
@@ -24,22 +24,33 @@ const size = 8
 const loading = ref(false)
 const removing = ref(false)
 const loadError = ref('')
+let loadRequestId = 0
 
 async function loadFavorites() {
+  const requestId = ++loadRequestId
   loading.value = true
   loadError.value = ''
   try {
     const data = await getMyFavoritesApi({ page: page.value, size })
-    items.value = data.records || []
-    total.value = data.total || 0
+    if (requestId === loadRequestId) {
+      items.value = data.records || []
+      total.value = data.total || 0
+    }
   } catch (error) {
-    loadError.value = error.message || '收藏加载失败'
+    if (requestId === loadRequestId) {
+      loadError.value = error.message || '收藏加载失败'
+    }
   } finally {
-    loading.value = false
+    if (requestId === loadRequestId) {
+      loading.value = false
+    }
   }
 }
 
 async function removeFavorite(item) {
+  if (removing.value) {
+    return
+  }
   removing.value = true
   try {
     await removeFavoriteApi(item.id)

@@ -1,14 +1,14 @@
 # CampusAI Market 项目上下文
 
 > 本文档用于让下一个 Codex 会话在只读取本项目文件时快速恢复上下文。
-> 最后更新：2026-09-11
+> 最后更新：2026-09-11（Phase 14 最终优化已实现，尚未创建 GitHub 远程仓库）
 
 ## 1. 项目一句话定位
 
 CampusAI Market 是一个面向校园二手交易场景的 Java 后端 + Spring AI Agent 项目：
 
-- 普通业务：用户注册登录、商品发布/搜索/详情/修改/下架、收藏、订单。
-- AI 能力：通过 `/api/agent/chat` 让 DeepSeek 基于 Spring AI Tool Calling 调用真实 Java 后端能力查询 MySQL，并基于 RAG 回答校园交易规则问题。
+- 普通业务：用户注册登录、商品发布/搜索/详情/修改/下架/重新上架、图片上传、收藏、订单状态机。
+- AI 能力：通过 DeepSeek 基于 Spring AI Tool Calling 调用真实 Java 后端能力查询 MySQL，基于 RAG 回答校园交易规则问题，并支持服务端多轮会话。
 - 目标用户：准备 Java 后端实习面试的学生；项目重点是“AI 真正参与业务”，不是简单聊天框。
 
 ## 2. 项目根目录与环境
@@ -27,7 +27,7 @@ CampusAI Market 是一个面向校园二手交易场景的 Java 后端 + Spring 
   `docker start campusai-redis`
 - Docker Desktop 需要先运行；若 Redis 未启动，代码已做降级处理，但 JWT 黑名单不可用。
 - Docker Compose 完整栈使用独立 MySQL/Redis 容器与 `campusai-market_mysql_data` 卷，和本机 MySQL80、`campusai-redis` 互不共享数据。
-- 本机 Embedding 模型缓存目录 `.model-cache/`（Git 忽略）可被 Compose 只读挂载到容器 `/models`，避免运行时下载失败。
+- 本机 Embedding 模型缓存目录 `.model-cache/`（Git 忽略）会以可写方式挂载到容器 `/models`，既可复用本地模型，也允许首次运行时缓存远程模型。
 
 ## 3. 关键技术版本
 
@@ -47,12 +47,9 @@ CampusAI Market 是一个面向校园二手交易场景的 Java 后端 + Spring 
 
 ### 4.1 必须存在但已被 Git 忽略的本地文件
 
-`src/main/resources/application.yml` 已在 `.gitignore` 中忽略，因为它包含：
-
-- MySQL root 密码
-- DeepSeek API Key
-
-该文件只存在于本机 `D:\CampusAI Market\src\main\resources\application.yml`。下一个会话应先读取它，但不要把真实密码/API Key 写进任何提交文件。
+`src/main/resources/application.yml` 已在 `.gitignore` 中忽略。当前文件只保存本地
+连接地址和 `${MYSQL_PASSWORD}`、`${DEEPSEEK_API_KEY}`、`${JWT_SECRET}` 等环境变量占位，
+真实值放在同样被 Git 忽略的根目录 `.env` 中。
 
 `application.yml` 当前结构：
 
@@ -61,8 +58,8 @@ server.port: 8080
 
 spring.datasource:
   url: jdbc:mysql://localhost:3306/campusai_market?...&useSSL=false
-  username: root
-  password: <本机真实 MySQL 密码>
+  username: ${LOCAL_MYSQL_USERNAME:root}
+  password: ${LOCAL_MYSQL_PASSWORD}
 
 spring.data.redis:
   host: localhost
@@ -70,16 +67,15 @@ spring.data.redis:
 
 spring.ai.openai:
   base-url: https://api.deepseek.com
-  api-key: <DeepSeek Key>
+  api-key: ${DEEPSEEK_API_KEY}
   chat.options.model: deepseek-chat
 
-spring.ai.embedding.transformer:
-  cache.enabled: true
-  onnx.model-uri: https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx
-  tokenizer.uri: https://hf-mirror.com/sentence-transformers/all-MiniLM-L6-v2/resolve/main/tokenizer.json
+app.rag:
+  model-uri: ${EMBEDDING_MODEL_URI:https://hf-mirror.com/.../model.onnx}
+  tokenizer-uri: ${EMBEDDING_TOKENIZER_URI:https://hf-mirror.com/.../tokenizer.json}
 
 jwt:
-  secret: <本机配置，长度足够 HMAC256>
+  secret: ${JWT_SECRET}
   expiration-minutes: 1440
 ```
 
@@ -139,8 +135,9 @@ Started CampusaiMarketApplication
 - 创建订单：`POST /api/orders`，事务内把商品 `ON_SALE -> SOLD`
 - 我的订单：`GET /api/orders/my?role=buyer|seller`
 - 订单状态：`PATCH /api/orders/{id}/status`
-  - 买家可取消 `CREATED -> CANCELLED`，商品恢复 `ON_SALE`
-  - 卖家可完成 `CREATED -> COMPLETED`
+  - 卖家可确认 `CREATED -> CONFIRMED`，并推进 `CONFIRMED -> IN_PROGRESS -> COMPLETED`
+  - 买卖双方可在完成前取消 `CREATED/CONFIRMED -> CANCELLED`，商品恢复 `ON_SALE`
+  - `COMPLETED` 与 `CANCELLED` 是终态
 
 创建订单使用条件更新：
 
@@ -153,13 +150,17 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
 ### 5.5 Redis
 
 - JWT 登出黑名单：
-  - Key：`auth:blacklist:<token>`
+  - Key：`auth:blacklist:v2:<sha256(token)>`
   - Value：`1`
   - TTL：token 剩余有效期
 - 热门商品缓存：
   - Key：`cache:item:hot`
   - TTL：300 秒
   - 商品发布、修改、下架、被下单、订单取消时主动删除缓存
+- Agent 搜索缓存：
+  - Key：`cache:item:search:v1:<version>:<sha256(condition)>`
+  - TTL：90 秒
+  - 商品写操作通过递增 version 让旧缓存失效；订单事务在提交成功后清理缓存
 - Redis 故障降级：JWT 过滤器不再因 Redis 不可用把所有请求判为 401，只验证 JWT 签名；黑名单功能暂时失效。
 
 ### 5.6 AI / Agent / RAG
@@ -202,7 +203,9 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
 - 本地开发：`npm install` 后 `npm run dev`，默认 `http://127.0.0.1:5173/`，Vite 把 `/api` 代理到 `http://localhost:8080`。
 - 页面：登录/注册、首页商品市场、商品详情、发布/编辑商品、我的商品、我的收藏、我的订单、AI 助手、404。
 - 会话：JWT 存 `localStorage`，Axios 请求自动带 `Authorization`，401 自动清会话并回登录页。
-- 商品图片后端只保存 URL；前端支持最多 5 个图片 URL 输入与预览，加载失败时按分类显示占位图。
+- 商品图片支持本地上传，也兼容 URL；前端最多保存 5 张图片，加载失败时按分类显示占位图。
+- AI 助手支持会话列表、历史恢复、删除会话、当前商品上下文和多轮对话。
+- 路由懒加载，Element Plus 按需注册，Vue/Element/图标/Markdown/HTTP 已独立分包。
 - AI 助手回答使用 `marked + DOMPurify` 做安全 Markdown 渲染；带 `itemId` 时每轮请求都会携带当前商品上下文。
 - 为 Phase 11 新增的两个后端契约：
   - `GET /api/categories`：公开分类列表，供搜索筛选和发布页使用。
@@ -225,6 +228,18 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
 - Swagger/OpenAPI：SpringDoc 2.8.9 已接入，Swagger UI 为 `/swagger-ui/index.html`，OpenAPI JSON 为 `/v3/api-docs`，支持 Bearer JWT。
 - 文档：README 已扩展，新增 `docs/er-diagram.md` 与 `docs/architecture.md`。
 
+### 5.10 最终优化（Phase 14 已实现，待最终运行验收）
+
+- 图片：新增 `POST /api/files/images` 与公开读取接口，校验 MIME、文件头、大小和路径，文件名使用 UUID；发布/编辑页支持上传、预览、删除和 URL 兼容。
+- Docker 图片持久化：Compose 新增 `uploads_data` 卷并挂载到 `/app/uploads`。
+- 商品状态：新增重新上架接口与卖家管理详情接口；公开详情仍只返回 `ON_SALE`。
+- AI 会话：新增 `ai_conversation`、`ai_message`、会话 CRUD、消息保存与用户隔离。
+- 多轮记忆：发送消息时加载最近 10 条历史消息，`便宜一点` 一类追问可继承之前条件。
+- Redis：新增 `cache:item:search:v1:version` 版本号和搜索缓存，TTL 90 秒；商品发布、修改、上下架、下单和取消订单均使缓存失效。
+- 订单状态机：支持 `CREATED -> CONFIRMED -> IN_PROGRESS -> COMPLETED`，并在完成前允许买卖双方取消；后端有条件更新防止并发状态覆盖。
+- 前端：登录/注册、首页、详情、卖家管理、订单和 AI 助手页面已统一视觉；AI 助手升级为会话列表、对话区、Agent 能力面板三栏布局。
+- 构建：路由懒加载，Element Plus 按需注册，Vue、Element Plus、图标、Markdown、HTTP 独立分包。
+
 ## 6. 数据库
 
 建表脚本：`sql/init.sql`
@@ -238,13 +253,15 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
 - `item`
 - `favorite`
 - `orders`
+- `ai_conversation`
+- `ai_message`
 
 关键设计：
 
 - 字符集 `utf8mb4`
 - 金额 `DECIMAL(10,2)`
 - 商品状态字符串：`ON_SALE / SOLD / OFF_SHELF`
-- 订单状态字符串：`CREATED / PAID / COMPLETED / CANCELLED`
+- 订单状态字符串：`CREATED / CONFIRMED / IN_PROGRESS / COMPLETED / CANCELLED`
 - `favorite` 唯一键 `(user_id, item_id)`
 - 表名 `orders`，避免 `order` 关键字
 - 分类默认数据：数码产品、教材、宿舍用品、生活用品、其他
@@ -256,10 +273,11 @@ UPDATE item SET status = 'SOLD' WHERE id = ? AND status = 'ON_SALE'
 ```text
 ai/
   rag/KnowledgeBaseService.java
-  rag/RagConfig.java
+  rag/RagProperties.java
   service/AiChatService.java
   tool/ItemTools.java
   tool/OrderTools.java
+  tool/ToolCallBudget.java
 common/
   ApiResponse.java
   PageResult.java
@@ -273,6 +291,7 @@ controller/
   AgentController.java
   AuthController.java
   FavoriteController.java
+  FileController.java
   ItemController.java
   OrderController.java
 dto/
@@ -309,6 +328,8 @@ styles/   全局 CSS 变量与通用样式
 
 Phase 13 实现提交：`401f09f feat: complete Phase 13 engineering hardening`
 
+Phase 14 代码截至本文件更新时位于工作区，尚未创建新提交。
+
 提交顺序：
 
 ```text
@@ -331,7 +352,7 @@ ddca895 feat: finish Phase 12 Docker stack validation
 401f09f feat: complete Phase 13 engineering hardening
 ```
 
-截至当前文档，Phase 13 代码和文档已实现、验证并提交到本地 Git；没有创建或推送 GitHub 远程仓库。后续提交仍不要把 `application.yml`、`.env`、`.model-cache/` 带入。
+截至当前文档，Phase 14 代码和文档已实现并验证，修改仍在本地工作区；没有创建或推送 GitHub 远程仓库。后续提交仍不要把 `application.yml`、`.env`、`.model-cache/`、`uploads/` 带入。
 
 ## 9. 已验证成功的内容
 
@@ -362,24 +383,27 @@ ddca895 feat: finish Phase 12 Docker stack validation
 - Phase 13：真实启动后 Swagger UI 返回 200，OpenAPI 3.1 文档包含 16 个路径和 `bearerAuth` scheme。
 - Phase 13：真实 HTTP 请求的空用户名、短密码、负价格、非法 JSON 均返回统一 `code=400` 中文错误。
 - Phase 13：日志实测显示 `LoginRequest` 类型和 JWT 长度，不包含密码或 token 原文。
+- Phase 14：`mvn clean test` 共 15 个测试全部通过。
+- Phase 14：`npm run build` 通过，主入口与各路由页面已独立分包，无大 chunk 警告。
+- Phase 14：Docker Compose 重新构建成功；`V2__phase14_ai_and_order_status.sql` 已应用到 Compose MySQL。
 
 ## 10. 当前已知问题与注意点
 
-1. `application.yml` 被 Git 忽略，克隆到新机器后必须重新创建并填入 MySQL 密码与 DeepSeek Key。
+1. `application.yml` 与 `.env` 均被 Git 忽略，克隆到新机器后需根据 `.env.example` 设置环境变量。
 2. DeepSeek 官方接口当前不提供 Embedding，因此 RAG 向量化使用本地 `all-MiniLM-L6-v2`。
-3. 本地模型首次启动会通过 `hf-mirror.com` 下载模型，并下载 DJL 的 PyTorch 原生库；首次启动较慢（实测约 30 秒到几分钟），之后模型有本地缓存。
+3. RAG 采用首次规则类提问时懒加载；模型不可用时只跳过规则增强，不再阻断后端启动。首次可用加载仍可能下载模型并耗时。
 4. 依赖包内自带的 `onnx/all-MiniLM-L6-v2/model.onnx` 是 133 字节占位文件，不能直接使用；必须使用配置中的 hf-mirror 地址，不能回退到 `classpath:onnx/.../model.onnx`。
 5. `all-MiniLM-L6-v2` 不是中文专用模型，中文语义检索只是“可用级别”；若后续要提升，可换 BGE 等中文模型。
 6. `SimpleVectorStore` 是内存向量库，重启后需要重新加载文档和生成向量。
-7. Agent 对话目前没有保存历史，每次 `/api/agent/chat` 是独立请求；尚未实现 conversation/message 持久化。
-8. `/api/agent/chat` 返回 DeepSeek 错误时可能经过 `/error` 被安全过滤器包装成 `401 未登录`，排查时看应用日志比看 HTTP body 更准确。
+7. Agent 新旧接口并存：`/api/agent/chat` 保持兼容但不保存历史；前端使用 `/api/agent/conversations/{id}/messages` 进行持久化多轮对话。
+8. AI 未配置或调用失败时统一返回 `503`，不会把上游异常堆栈暴露给客户端。
 9. Spring AI 的 OpenAI 兼容 base-url 必须是 `https://api.deepseek.com`，不能写成 `/v1`，否则 DeepSeek 返回 404。
 10. Windows PowerShell 5.1 用字符串发送中文 JSON 会乱码；测试时先把 JSON 转成 UTF-8 字节再作为 `-Body`。PowerShell 控制台显示乱码不代表 API 返回乱码，可用 `curl` 或由后端日志确认。
 11. 项目目录名包含空格；后续 Docker Compose、shell 脚本要全程加引号。
 12. 参数校验、统一异常、Swagger/OpenAPI 和日志切面已在 Phase 13 完成；GitHub 远程仓库与 push 按用户要求暂缓。
-13. 前端暂没有图片上传接口，发布商品只能填图片 URL；如需真实文件上传需要后端加存储/静态资源能力。
-14. AI 助手对话只保存在当前前端页面内存，刷新后即清空；服务端 conversation/message 持久化仍未做。
-15. 前端生产构建有单 chunk 超过 500KB 的提示，属于体积优化项，可放到 Phase 13 做路由懒加载与手动分包。
+13. 图片上传存入后端本地磁盘；Compose 使用 `uploads_data` 卷，多实例部署时应改用对象存储。
+14. AI 助手已使用服务端会话持久化；上下文只取最近 10 条，避免 token 和数据库压力无限增长。
+15. 前端生产构建已完成路由懒加载与手动分包，后续收益主要在减少 Element Plus 全量 CSS 和图片资源体积。
 16. Docker/Nginx 已配置 `/api` 反代；Vite 代理只服务于本地开发。
 17. Compose MySQL 由 `sql/init.sql` 初始化，本机 MySQL80 里的数据不会自动进入 Compose；若 Docker 内 hf-mirror 下载 Embedding 模型为空文件，使用 `.model-cache` 本地挂载。
 
@@ -390,14 +414,13 @@ ddca895 feat: finish Phase 12 Docker stack validation
 - Phase 11：Vue 3 + Element Plus 前端主体已完成；可选补充：真实图片上传、编辑商品页体验优化、商品详情对已售/下架商品的卖家视图
 - Phase 12：Docker Compose（MySQL、Redis、Backend、Frontend）完整栈已启动验证
 - Phase 13：参数校验、统一异常、日志切面、Swagger/OpenAPI、README、ER 图和架构图已完成并验证；GitHub 远程仓库仍待用户确认后创建
+- Phase 14：图片上传、商品重新上架、卖家状态管理、AI 会话持久化、多轮记忆、搜索缓存、订单状态机和前端分包已完成。
 
 后续可选增强：
 
-- AI 对话记录表 `conversation` / `message`
-- 多轮 Agent 记忆
-- 中文 Embedding 模型
-- AI 搜索结果 Redis 缓存
-- 更完整的订单状态流转
+- 中文 Embedding 模型替换（必须先建立中文检索评测集）
+- 图片对象存储与缩略图
+- Agent 工具调用轨迹脱敏展示
 - MCP（按用户要求暂缓）
 
 ## 12. 测试提示
