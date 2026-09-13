@@ -2,7 +2,7 @@
 
 CampusAI Market 是一个面向校园二手交易场景的 Spring Boot + Spring AI 项目，同时作为 Java 后端面试展示作品。项目不只提供传统商品交易接口，还把 DeepSeek Tool Calling 与本地 RAG 接入真实业务数据。
 
-## 在线学习文档
+## 在线学习文档（https://doubleliuone.github.io/campus-ai-market/）
 
 仓库新增了独立的 VitePress 课程站，源码位于 `docs-site/`。内容从真实代码出发，覆盖系统架构、Spring Boot、JWT、MySQL、Redis、订单状态机、Vue、Docker、AI Agent、Tool Calling、RAG、六大业务链路和项目面试题库。
 
