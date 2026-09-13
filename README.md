@@ -2,6 +2,18 @@
 
 CampusAI Market 是一个面向校园二手交易场景的 Spring Boot + Spring AI 项目，同时作为 Java 后端面试展示作品。项目不只提供传统商品交易接口，还把 DeepSeek Tool Calling 与本地 RAG 接入真实业务数据。
 
+## 在线学习文档
+
+仓库新增了独立的 VitePress 课程站，源码位于 `docs-site/`。内容从真实代码出发，覆盖系统架构、Spring Boot、JWT、MySQL、Redis、订单状态机、Vue、Docker、AI Agent、Tool Calling、RAG、六大业务链路和项目面试题库。
+
+```powershell
+Set-Location -LiteralPath 'D:\CampusAI Market\docs-site'
+npm install
+npm run dev
+```
+
+推送 `main` 后，GitHub Actions 会构建并部署到 GitHub Pages。首次部署前需在仓库 `Settings -> Pages` 将 Source 设置为 `GitHub Actions`。
+
 ## 项目背景
 
 校园二手交易通常需要覆盖商品发布、搜索、收藏、下单和订单状态流转，同时用户经常需要快速确认“有没有某类商品”“这件商品是否适合我”“平台交易规则是什么”。本项目用传统后端保证交易数据与状态一致性，再用 AI Agent 查询真实业务数据并回答规则问题，避免把 AI 做成脱离业务的聊天框。
